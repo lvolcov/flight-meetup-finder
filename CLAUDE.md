@@ -47,9 +47,12 @@ server in Docker. Full spec is in `REQUIREMENTS.md`.
 2. ✅ Verify `fast-flights` API with a real query (see "Verified" below).
 3. ✅ Core logic + unit tests (date pairs, filters, gap matching, ranking).
    17 pytest tests passing.
-4. ⏳ **NEXT** — `services/flights.py` wrapper (parse fast-flights strings
-   into `Flight` dataclasses) + SQLite cache layer + asyncio job runner.
-5. ⏳ FastAPI endpoints (search, jobs, saved searches, destinations).
+4. ✅ `services/flights.py` wrapper (parses fast-flights strings into `Flight`
+   dataclasses), SQLite layer (`services/db.py`), read-through cache
+   (`services/cache.py`) and asyncio job runner (`services/jobs.py`).
+   Pydantic request/response schemas in `app/models/schemas.py`,
+   settings in `app/config.py`. Tests: parsers + mocked end-to-end job.
+5. ⏳ **NEXT** — FastAPI endpoints (search, jobs, saved searches, destinations).
 6. ⏳ Frontend (light theme → dark mode → mobile responsive).
 7. ⏳ Dockerfile + docker-compose (Playwright-capable image — base
    image `mcr.microsoft.com/playwright/python:v1.49.1-jammy` is the
@@ -66,15 +69,25 @@ session should pick the next pending step and commit + push when done.
 
 ```
 app/
+  config.py         # pydantic-settings Settings (reads .env)
   core/
     date_pairs.py   # DateWindow + generate_date_pairs
     models.py       # Flight, TimeRule, Stops, LegFilter dataclasses
     filters.py      # filter_flights, cheapest
     matching.py     # MeetupCandidate, match_meetup, gap_minutes
     ranking.py      # by_combined_price / arrival_gap / total_duration
-  api/ services/ models/ templates/ static/   # empty, awaiting steps 4-6
+  models/
+    schemas.py      # Pydantic v2 request/response schemas
+  services/
+    flights.py      # ONLY fast_flights importer; string parsers + service
+    seed_data.py    # IATA -> name seed map (REQUIREMENTS §6)
+    db.py           # aiosqlite schema, seed + CRUD (ARCHITECTURE §3)
+    cache.py        # read-through scrape cache (F-19)
+    jobs.py         # asyncio JobRunner, task expansion, query estimate
+  api/ templates/ static/   # empty, awaiting steps 5-6
 tests/
-  test_date_pairs.py    test_filters.py    test_matching.py   (17 tests)
+  test_date_pairs.py  test_filters.py  test_matching.py
+  test_flights_parsing.py  test_jobs.py   (41 tests)
 ```
 
 The `app.core` package is intentionally framework-free — nothing in it
