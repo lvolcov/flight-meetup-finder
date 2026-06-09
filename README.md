@@ -11,15 +11,28 @@ takes hours. This tool automates it.
 
 ## Status
 
-🚧 **Work in progress.** Project skeleton, documentation and API
-verification only — see commit history for what is implemented.
+✅ **Functional.** Core engine, `fast-flights` wrapper, SQLite cache, the
+background job runner, the full REST API and a responsive Jinja/vanilla-JS UI
+(light + dark mode) are implemented and tested.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
-docker compose up -d
+docker compose up -d --build
 # open http://localhost:8742
+```
+
+The container uses the official Playwright image (`-noble`, Python 3.12) so the
+Chromium browser required by the `fast-flights` local fetch mode is baked in.
+
+## Tests
+
+```bash
+pip install -r requirements.txt
+pytest -q                       # unit + API integration (offline)
+playwright install chromium
+pytest tests/e2e -o addopts=""  # Playwright front-end e2e (offline scraper)
 ```
 
 See [`REQUIREMENTS.md`](./REQUIREMENTS.md) for the full feature spec and

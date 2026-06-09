@@ -1,0 +1,23 @@
+# Keep the build context (and image) lean.
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data + secrets must never enter the image.
+data/
+.env
+.env.local
+
+# VCS / editor / docs not needed at runtime.
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+tests/
+*.md
+ms-playwright/

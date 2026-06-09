@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -35,7 +36,9 @@ class Settings(BaseSettings):
     traveller_a_name: str = "Lucas"
     traveller_a_origin: str = "MAN"
     traveller_b_name: str = "Talita"
-    traveller_b_origins: list[str] = ["LIS", "OPO", "FAO"]
+    # NoDecode stops pydantic-settings JSON-decoding the env value so the
+    # validator below can split the documented comma-separated form.
+    traveller_b_origins: Annotated[list[str], NoDecode] = ["LIS", "OPO", "FAO"]
 
     @field_validator("traveller_b_origins", mode="before")
     @classmethod

@@ -63,16 +63,19 @@ server in Docker. Full spec is in `REQUIREMENTS.md`.
    Playwright e2e in `tests/e2e/` (run with `pytest tests/e2e -o addopts=""`;
    they spin up uvicorn with `FMF_FAKE_SCRAPER=1` + headless Chromium).
    5 e2e tests passing; the default `pytest -q` ignores `tests/e2e`.
-7. ⏳ **NEXT** — Dockerfile + docker-compose (Playwright-capable image — base
-   image `mcr.microsoft.com/playwright/python:v1.49.1-jammy` is the
-   path of least resistance; the alternative is a slim image plus
-   `playwright install --with-deps chromium`).
+7. ✅ Dockerfile + docker-compose. Base image
+   `mcr.microsoft.com/playwright/python:v1.49.1-**noble**` (NOT jammy — jammy
+   ships Python 3.10, which lacks `datetime.UTC`; noble ships 3.12, the
+   project target). Non-root `pwuser`, `.dockerignore`, named volume
+   `fmf-data` at `/data`, healthcheck on `/healthz`, host `${APP_PORT:-8742}`
+   → container `8000`. Verified: `docker compose up -d --build` →
+   container reports **healthy**, `/healthz` 200, 47 destinations seeded.
 8. ✅ Private GitHub repo created and pushed:
    <https://github.com/lvolcov/flight-meetup-finder>.
 
-The user explicitly asked for **slow, incremental** progress — do **not**
-attempt steps 4–7 all in one session unless explicitly asked. Each
-session should pick the next pending step and commit + push when done.
+**ALL BUILD STEPS COMPLETE.** Future work is enhancement/maintenance only.
+The original brief asked for slow, incremental progress; a later session was
+explicitly authorised to complete steps 4–7 in one go, which it did.
 
 ## What's in the repo (current state)
 
