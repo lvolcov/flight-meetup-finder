@@ -402,6 +402,7 @@ class JobRunner:
             "stops": flight.stops,
             "price_amount": flight.price_amount,
             "price_currency": flight.price_currency,
+            "price_gbp": round(self._to_gbp(flight), 2),
             "deep_link": google_flights_link(
                 origin, destination, flight.depart_dt.date()
             ),

@@ -161,6 +161,9 @@ class Destination(BaseModel):
     iata: str
     name: str
     enabled: bool = True
+    # Schengen airports have no passport control from Lisbon (Talita's
+    # constraint); non-Schengen ones can be deselected in bulk in the UI.
+    schengen: bool = True
 
 
 class DestinationCreate(BaseModel):

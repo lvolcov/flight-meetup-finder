@@ -59,6 +59,42 @@ SEED_DESTINATIONS: dict[str, str] = {
     "LJU": "Ljubljana",
 }
 
+# Airports OUTSIDE the Schengen area — flying there from Lisbon means
+# passport control, which Talita's visa situation does not allow (F-1).
+# Covers the seed list plus common European airports a user might add.
+# Note this is Schengen, not EU: Dublin is EU but has immigration;
+# Switzerland/Norway/Iceland are not EU but have none. Romania, Bulgaria
+# and Croatia are Schengen since 2023/2024.
+NON_SCHENGEN_IATA: frozenset[str] = frozenset(
+    {
+        # United Kingdom
+        "LHR", "LGW", "STN", "LTN", "LCY", "SEN", "MAN", "BHX", "BRS",
+        "NCL", "LPL", "LBA", "EMA", "EDI", "GLA", "ABZ", "BFS", "BHD",
+        "GIB",
+        # Ireland (EU but not Schengen)
+        "DUB", "ORK", "SNN", "KIR",
+        # Cyprus (EU but not Schengen)
+        "LCA", "PFO",
+        # Western Balkans
+        "TIA", "BEG", "INI", "SJJ", "TZL", "BNX", "TGD", "TIV", "PRN",
+        "SKP", "OHD",
+        # Türkiye
+        "IST", "SAW", "ESB", "ADB", "AYT",
+        # Eastern Europe (non-Schengen)
+        "KIV", "RMO", "KBP", "IEV", "LWO", "ODS", "MSQ",
+    }
+)
+
+
+def is_schengen(iata: str) -> bool:
+    """Return True when an airport is inside the Schengen area.
+
+    Unknown codes default to True (the user can still untick them manually);
+    the known non-Schengen set above keeps the common cases honest.
+    """
+    return iata.strip().upper() not in NON_SCHENGEN_IATA
+
+
 # Fixed origin / Portugal airports, named for display in both modes.
 KNOWN_AIRPORTS: dict[str, str] = {
     "MAN": "Manchester",

@@ -119,6 +119,21 @@ input, select {
 }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+.date-field { position: relative; display: flex; align-items: stretch; gap: .4rem; }
+.date-field input[type="text"] { flex: 1; min-width: 0; }
+.date-btn {
+  border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 9px; padding: 0 .55rem; cursor: pointer; font-size: 1rem;
+  line-height: 1;
+}
+.date-btn:hover { border-color: var(--accent); }
+/* Kept rendered (not display:none) so showPicker() works; the popup anchors
+   here, i.e. right under the calendar button. */
+.date-pick {
+  position: absolute; right: 0; bottom: 0; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; border: 0; padding: 0;
+}
+
 .weekdays {
   grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 9px;
   padding: .5rem .75rem; display: flex; flex-wrap: wrap; gap: .5rem 1rem;
@@ -129,6 +144,8 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .hint { font-size: .85rem; color: var(--text-soft); }
 
 .dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .4rem .8rem; }
+.schengen-toggle { margin: .25rem 0 .75rem; font-weight: 600; }
+.mini-badge { font-size: .65rem; background: var(--warn-bg); color: var(--warn-text); padding: .05rem .4rem; border-radius: 999px; }
 
 .estimate-bar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .estimate { font-weight: 600; }
@@ -184,6 +201,8 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .itin h4 { margin: 0 0 .3rem; font-family: 'Inter', sans-serif; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-soft); }
 .leg { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; padding: .15rem 0; flex-wrap: wrap; }
 .leg a { text-decoration: none; }
+.leg-price { font-weight: 600; color: var(--accent-strong); }
+.leg-orig { font-weight: 400; color: var(--text-soft); }
 .disclaimer { background: var(--warn-bg); color: var(--warn-text); border-radius: 12px; padding: .85rem 1rem; font-size: .9rem; }
 
 .empty { color: var(--text-soft); text-align: center; padding: 2rem; }

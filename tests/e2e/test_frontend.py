@@ -66,6 +66,12 @@ def test_search_streams_results(page: Page, base_url: str) -> None:
     # ...and the job reaches completion.
     expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
     assert page.locator(".result").count() >= 1
+    # Every leg shows its own price in pounds (EUR legs also show the
+    # original euro amount).
+    first = page.locator(".result").first
+    assert first.locator(".leg-price").count() == 4  # meetup = 4 legs
+    expect(first.locator(".leg-price").first).to_contain_text("£")
+    expect(first.locator(".leg-orig").first).to_contain_text("€")
 
 
 def test_dates_use_british_format(page: Page, base_url: str) -> None:
@@ -99,6 +105,56 @@ def test_dates_use_british_format(page: Page, base_url: str) -> None:
     page.wait_for_url("**/search/**")
     expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
     expect(page.locator(".result .badge").first).to_contain_text("15 Jul → 18 Jul")
+
+
+def test_schengen_toggle_deselects_passport_destinations(
+    page: Page, base_url: str
+) -> None:
+    page.goto(base_url + "/")
+    page.wait_for_selector("#dest-list input[type=checkbox]")
+    edi = page.locator('#dest-list input[value="EDI"]')
+    bcn = page.locator('#dest-list input[value="BCN"]')
+    assert edi.is_checked() and bcn.is_checked()
+
+    # One tap deselects everything with passport control from Lisbon...
+    page.check("#schengen-only")
+    assert not edi.is_checked()
+    assert bcn.is_checked()
+    # Dublin is EU but not Schengen — must be deselected too.
+    assert not page.locator('#dest-list input[value="DUB"]').is_checked()
+
+    # ...and unticking brings them back.
+    page.uncheck("#schengen-only")
+    assert edi.is_checked()
+
+    # The choice persists across reloads (localStorage).
+    page.check("#schengen-only")
+    page.reload()
+    page.wait_for_selector("#dest-list input[type=checkbox]")
+    assert page.locator("#schengen-only").is_checked()
+    assert not page.locator('#dest-list input[value="EDI"]').is_checked()
+
+
+def test_calendar_button_fills_british_date(page: Page, base_url: str) -> None:
+    page.goto(base_url + "/")
+    wrap = page.locator(".date-field").first
+    expect(wrap.locator(".date-btn")).to_be_visible()
+    # Playwright cannot drive the OS calendar popup, so simulate the pick on
+    # the hidden native input and assert it lands as dd/mm/yyyy in the box.
+    page.evaluate(
+        """() => {
+            const wrap = document.querySelector('.date-field');
+            const pick = wrap.querySelector('.date-pick');
+            pick.value = '2026-07-15';
+            pick.dispatchEvent(new Event('change', { bubbles: true }));
+        }"""
+    )
+    assert (
+        page.locator('input[name="outbound_start"]').input_value()
+        == "15/07/2026"
+    )
+    # The sync must also refresh the live query estimate.
+    expect(page.locator("#estimate")).to_contain_text("scrape", timeout=5000)
 
 
 def test_running_search_visible_after_navigating_away(

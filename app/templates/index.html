@@ -26,16 +26,24 @@
 
   <input type="hidden" name="mode" id="mode" value="meetup">
 
+  {% macro datefield(name) -%}
+  <span class="date-field">
+    <input type="text" name="{{ name }}" inputmode="numeric"
+           placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required>
+    <button type="button" class="date-btn" aria-label="Open calendar"
+            title="Open calendar">📅</button>
+    <input type="date" class="date-pick" tabindex="-1" aria-hidden="true">
+  </span>
+  {%- endmacro %}
+
   <!-- Dates -->
   <details class="accordion" open>
     <summary>Dates &amp; trip length</summary>
     <div class="accordion-body grid-2">
       <label>Outbound from
-        <input type="text" name="outbound_start" inputmode="numeric"
-               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
+        {{ datefield('outbound_start') }}</label>
       <label>Outbound to
-        <input type="text" name="outbound_end" inputmode="numeric"
-               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
+        {{ datefield('outbound_end') }}</label>
       <fieldset class="weekdays" data-weekdays="outbound">
         <legend>Outbound weekdays</legend>
         {% for wd in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
@@ -43,11 +51,9 @@
         {% endfor %}
       </fieldset>
       <label>Return from
-        <input type="text" name="return_start" inputmode="numeric"
-               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
+        {{ datefield('return_start') }}</label>
       <label>Return to
-        <input type="text" name="return_end" inputmode="numeric"
-               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
+        {{ datefield('return_end') }}</label>
       <fieldset class="weekdays" data-weekdays="return">
         <legend>Return weekdays</legend>
         {% for wd in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
@@ -68,6 +74,11 @@
       <div data-mode-only="meetup">
         <p class="hint">Search these candidate cities (manage the full list on
           the <a href="/saved">Saved</a> page). All enabled by default.</p>
+        <label class="chk schengen-toggle">
+          <input type="checkbox" id="schengen-only">
+          Schengen only — deselect destinations with passport control from
+          Lisbon (UK, Ireland, etc.)
+        </label>
         <div id="dest-list" class="dest-grid"></div>
         <fieldset class="weekdays" id="b-origins">
           <legend>{{ traveller_b }} departs from</legend>

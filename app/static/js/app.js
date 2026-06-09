@@ -164,11 +164,62 @@ async function loadDestinationChecklist() {
   try {
     const rows = await getJSON('/api/destinations?enabled_only=true');
     box.innerHTML = rows.map((r) =>
-      `<label class="chk"><input type="checkbox" value="${r.iata}" checked>` +
-      `${r.iata} · ${r.name}</label>`).join('');
+      `<label class="chk" data-schengen="${r.schengen ? 1 : 0}">` +
+      `<input type="checkbox" value="${r.iata}" checked>` +
+      `${r.iata} · ${r.name}` +
+      (r.schengen ? '' : ' <span class="badge mini-badge">passport</span>') +
+      `</label>`).join('');
+    applySchengenOnly($('#schengen-only').checked);
   } catch (e) {
     box.innerHTML = '<p class="hint">Could not load destinations.</p>';
   }
+}
+
+/* Bulk de/select destinations outside the Schengen area (passport control
+   when flying from Lisbon). State persists across visits. */
+function applySchengenOnly(on) {
+  $$('#dest-list label[data-schengen="0"] input').forEach((boxEl) => {
+    boxEl.checked = !on;
+  });
+}
+function initSchengenToggle() {
+  const toggle = $('#schengen-only');
+  if (!toggle) return;
+  try { toggle.checked = localStorage.getItem('fmf-schengen-only') === '1'; }
+  catch (e) { /* localStorage unavailable */ }
+  toggle.addEventListener('change', () => {
+    try {
+      localStorage.setItem('fmf-schengen-only', toggle.checked ? '1' : '0');
+    } catch (e) { /* noop */ }
+    applySchengenOnly(toggle.checked);
+    scheduleEstimate();
+  });
+}
+
+/* Each date field is a dd/mm/yyyy text box plus a calendar button that opens
+   the browser's native picker (a hidden type=date input). The picker writes
+   its choice back in dd/mm/yyyy, so the display format never depends on the
+   browser locale. */
+function initDateFields() {
+  $$('.date-field').forEach((wrap) => {
+    const text = $('input[type="text"]', wrap);
+    const pick = $('input.date-pick', wrap);
+    $('.date-btn', wrap).addEventListener('click', () => {
+      const iso = ukToISO(text.value);
+      if (iso) pick.value = iso;
+      try {
+        pick.showPicker();
+      } catch (e) {
+        pick.focus();
+        pick.click();
+      }
+    });
+    pick.addEventListener('change', () => {
+      if (!pick.value) return;
+      text.value = isoToUK(pick.value);
+      text.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
 }
 
 /* Recent searches (server-side jobs) — visible from any device, and they
@@ -221,6 +272,8 @@ function scheduleEstimate() {
 function initIndex() {
   applyMode('meetup');
   setDefaultDates();
+  initDateFields();
+  initSchengenToggle();
   loadDestinationChecklist().then(refreshEstimate);
   loadRecentJobs();
 
@@ -261,10 +314,20 @@ function initIndex() {
 /* =================================================================== */
 /* Results page (F-14, F-21, F-22)                                     */
 /* =================================================================== */
+function legPrice(leg) {
+  if (leg.price_gbp == null) return '';
+  let price = `£${leg.price_gbp.toFixed(0)}`;
+  if (leg.price_currency === 'EUR') {
+    price += ` <span class="leg-orig">(€${leg.price_amount.toFixed(0)})</span>`;
+  }
+  return `<span class="leg-price">${price}</span>`;
+}
+
 function legRow(label, leg) {
   return `<div class="leg"><span>${label}: <strong>${leg.airline}</strong></span>` +
     `<span>${fmtDateTime(leg.depart_dt)} → ${fmtDateTime(leg.arrive_dt)}</span>` +
     `<span>${fmtDuration(leg.duration_minutes)} · ${stopsLabel(leg.stops)}</span>` +
+    legPrice(leg) +
     `<a href="${leg.deep_link}" target="_blank" rel="noopener">Google&nbsp;Flights ↗</a></div>`;
 }
 
@@ -421,7 +484,9 @@ async function loadDestManager() {
   const rows = await getJSON('/api/destinations');
   box.innerHTML = rows.map((r) =>
     `<label class="chk"><input type="checkbox" data-iata="${r.iata}" ` +
-    `${r.enabled ? 'checked' : ''}>${r.iata} · ${r.name}</label>`).join('');
+    `${r.enabled ? 'checked' : ''}>${r.iata} · ${r.name}` +
+    (r.schengen ? '' : ' <span class="badge mini-badge">passport</span>') +
+    `</label>`).join('');
   $$('input[data-iata]', box).forEach((c) =>
     c.addEventListener('change', () =>
       sendJSON(`/api/destinations/${c.dataset.iata}`, 'PATCH', { enabled: c.checked })));

@@ -15,13 +15,14 @@ from pathlib import Path
 
 import aiosqlite
 
-from app.services.seed_data import SEED_DESTINATIONS
+from app.services.seed_data import NON_SCHENGEN_IATA, SEED_DESTINATIONS
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS destinations (
     iata        TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1,
+    schengen    INTEGER NOT NULL DEFAULT 1,
     added_at    TEXT NOT NULL
 );
 
@@ -98,17 +99,48 @@ async def init_db(db_path: Path) -> None:
         await conn.execute("PRAGMA foreign_keys=ON")
         await conn.executescript(SCHEMA)
         await conn.commit()
+        await _migrate(conn)
         await _seed_destinations(conn)
         await conn.commit()
+
+
+async def _migrate(conn: aiosqlite.Connection) -> None:
+    """Apply additive schema changes to databases created by older versions."""
+    cols = [
+        row[1]
+        for row in await (
+            await conn.execute("PRAGMA table_info(destinations)")
+        ).fetchall()
+    ]
+    if "schengen" not in cols:
+        await conn.execute(
+            "ALTER TABLE destinations ADD COLUMN "
+            "schengen INTEGER NOT NULL DEFAULT 1"
+        )
+    # Re-classify every boot so the known non-Schengen set stays applied to
+    # rows that predate it (idempotent).
+    placeholders = ",".join("?" for _ in NON_SCHENGEN_IATA)
+    await conn.execute(
+        f"UPDATE destinations SET schengen = 0 WHERE iata IN ({placeholders})",
+        tuple(NON_SCHENGEN_IATA),
+    )
+    await conn.execute(
+        f"UPDATE destinations SET schengen = 1 "
+        f"WHERE iata NOT IN ({placeholders})",
+        tuple(NON_SCHENGEN_IATA),
+    )
 
 
 async def _seed_destinations(conn: aiosqlite.Connection) -> None:
     """Insert the seed destinations, ignoring any that already exist."""
     now = _now()
     await conn.executemany(
-        "INSERT OR IGNORE INTO destinations (iata, name, enabled, added_at) "
-        "VALUES (?, ?, 1, ?)",
-        [(iata, name, now) for iata, name in SEED_DESTINATIONS.items()],
+        "INSERT OR IGNORE INTO destinations "
+        "(iata, name, enabled, schengen, added_at) VALUES (?, ?, 1, ?, ?)",
+        [
+            (iata, name, 0 if iata in NON_SCHENGEN_IATA else 1, now)
+            for iata, name in SEED_DESTINATIONS.items()
+        ],
     )
 
 
@@ -124,7 +156,7 @@ async def list_destinations(
         db_path: Database path.
         enabled_only: If True, return only enabled destinations.
     """
-    query = "SELECT iata, name, enabled, added_at FROM destinations"
+    query = "SELECT iata, name, enabled, schengen, added_at FROM destinations"
     if enabled_only:
         query += " WHERE enabled = 1"
     query += " ORDER BY name"
@@ -134,18 +166,21 @@ async def list_destinations(
     return [dict(row) for row in rows]
 
 
-async def add_destination(db_path: Path, iata: str, name: str) -> dict:
+async def add_destination(
+    db_path: Path, iata: str, name: str, schengen: bool = True
+) -> dict:
     """Insert or update a destination by IATA code, returning the row."""
     iata = iata.strip().upper()
     async with aiosqlite.connect(db_path) as conn:
         await conn.execute(
-            "INSERT INTO destinations (iata, name, enabled, added_at) "
-            "VALUES (?, ?, 1, ?) "
-            "ON CONFLICT(iata) DO UPDATE SET name = excluded.name, enabled = 1",
-            (iata, name, _now()),
+            "INSERT INTO destinations (iata, name, enabled, schengen, added_at) "
+            "VALUES (?, ?, 1, ?, ?) "
+            "ON CONFLICT(iata) DO UPDATE SET name = excluded.name, enabled = 1, "
+            "schengen = excluded.schengen",
+            (iata, name, 1 if schengen else 0, _now()),
         )
         await conn.commit()
-    return {"iata": iata, "name": name, "enabled": 1}
+    return {"iata": iata, "name": name, "enabled": 1, "schengen": schengen}
 
 
 async def set_destination_enabled(

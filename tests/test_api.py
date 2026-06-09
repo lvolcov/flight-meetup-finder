@@ -65,6 +65,20 @@ def test_destinations_seeded_and_crud(client: TestClient) -> None:
     codes = {r["iata"] for r in rows}
     assert {"BCN", "MAD", "ATH"} <= codes
 
+    # Schengen classification: no passport control from Lisbon for BCN/ZRH
+    # (ZRH is not EU but is Schengen); EDI/GLA/DUB/TIA have immigration
+    # (DUB is EU but not Schengen).
+    by_iata = {r["iata"]: r for r in rows}
+    for code in ("BCN", "MAD", "ZRH", "OSL", "ZAG", "OTP"):
+        assert by_iata[code]["schengen"] is True, code
+    for code in ("EDI", "GLA", "DUB", "TIA"):
+        assert by_iata[code]["schengen"] is False, code
+
+    # Adding a known non-Schengen airport classifies it automatically.
+    created = client.post("/api/destinations", json={"iata": "LHR"}).json()
+    assert created["schengen"] is False
+    client.delete("/api/destinations/LHR")
+
     # Disable then re-enable BCN.
     assert client.patch("/api/destinations/BCN", json={"enabled": False}).json()[
         "enabled"

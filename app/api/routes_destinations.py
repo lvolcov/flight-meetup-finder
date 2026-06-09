@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from app.api.deps import get_db_path
 from app.models.schemas import Destination, DestinationCreate, DestinationUpdate
 from app.services import db
-from app.services.seed_data import KNOWN_AIRPORTS
+from app.services.seed_data import KNOWN_AIRPORTS, is_schengen
 
 router = APIRouter(prefix="/api/destinations", tags=["destinations"])
 
@@ -25,7 +25,12 @@ async def list_destinations(
     """Return all destinations (optionally only the enabled ones)."""
     rows = await db.list_destinations(db_path, enabled_only=enabled_only)
     return [
-        Destination(iata=r["iata"], name=r["name"], enabled=bool(r["enabled"]))
+        Destination(
+            iata=r["iata"],
+            name=r["name"],
+            enabled=bool(r["enabled"]),
+            schengen=bool(r["schengen"]),
+        )
         for r in rows
     ]
 
@@ -39,8 +44,11 @@ async def add_destination(
     if len(iata) != 3 or not iata.isalpha():
         raise HTTPException(status_code=422, detail="IATA code must be 3 letters")
     name = payload.name or KNOWN_AIRPORTS.get(iata, iata)
-    row = await db.add_destination(db_path, iata, name)
-    return Destination(iata=row["iata"], name=row["name"], enabled=True)
+    schengen = is_schengen(iata)
+    row = await db.add_destination(db_path, iata, name, schengen=schengen)
+    return Destination(
+        iata=row["iata"], name=row["name"], enabled=True, schengen=schengen
+    )
 
 
 @router.patch("/{iata}", response_model=Destination)
@@ -57,7 +65,10 @@ async def update_destination(
     match = next((r for r in rows if r["iata"] == iata.strip().upper()), None)
     assert match is not None
     return Destination(
-        iata=match["iata"], name=match["name"], enabled=bool(match["enabled"])
+        iata=match["iata"],
+        name=match["name"],
+        enabled=bool(match["enabled"]),
+        schengen=bool(match["schengen"]),
     )
 
 

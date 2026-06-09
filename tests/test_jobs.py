@@ -102,6 +102,28 @@ def test_expand_visit_task_count() -> None:
     assert tasks == {("MAN", "LIS", "2026-07-10"), ("LIS", "MAN", "2026-07-13")}
 
 
+async def test_schengen_column_migrates_old_database(tmp_path: Path) -> None:
+    """A DB created before the schengen column exists must be upgraded."""
+    import aiosqlite
+
+    db_path = tmp_path / "fmf.db"
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute(
+            "CREATE TABLE destinations (iata TEXT PRIMARY KEY, name TEXT NOT "
+            "NULL, enabled INTEGER NOT NULL DEFAULT 1, added_at TEXT NOT NULL)"
+        )
+        await conn.execute(
+            "INSERT INTO destinations VALUES ('EDI', 'Edinburgh', 1, 'x'), "
+            "('BCN', 'Barcelona', 1, 'x')"
+        )
+        await conn.commit()
+
+    await db.init_db(db_path)
+    rows = {r["iata"]: r for r in await db.list_destinations(db_path)}
+    assert rows["EDI"]["schengen"] == 0
+    assert rows["BCN"]["schengen"] == 1
+
+
 async def test_estimate_queries(tmp_path: Path) -> None:
     db_path = tmp_path / "fmf.db"
     await db.init_db(db_path)
@@ -131,6 +153,11 @@ async def test_meetup_job_streams_results(tmp_path: Path) -> None:
     # Legs: A-out MAN->BCN GBP 100; A-ret/B-out/B-ret originate elsewhere ->
     # EUR 100 @ 0.85 = 85 each. 100 + 85 + 85 + 85 = 355.
     assert payload["combined_gbp"] == pytest.approx(355.0)
+    # Every individual leg carries its own GBP price for the UI.
+    assert payload["traveller_a"]["outbound"]["price_gbp"] == pytest.approx(100.0)
+    assert payload["traveller_a"]["return"]["price_gbp"] == pytest.approx(85.0)
+    assert payload["traveller_b"]["outbound"]["price_gbp"] == pytest.approx(85.0)
+    assert payload["traveller_b"]["return"]["price_gbp"] == pytest.approx(85.0)
     assert payload["arrival_gap_minutes"] == 0
 
 
