@@ -52,8 +52,11 @@ server in Docker. Full spec is in `REQUIREMENTS.md`.
    (`services/cache.py`) and asyncio job runner (`services/jobs.py`).
    Pydantic request/response schemas in `app/models/schemas.py`,
    settings in `app/config.py`. Tests: parsers + mocked end-to-end job.
-5. ⏳ **NEXT** — FastAPI endpoints (search, jobs, saved searches, destinations).
-6. ⏳ Frontend (light theme → dark mode → mobile responsive).
+5. ✅ FastAPI endpoints + lifespan (`app/main.py`, `app/api/*`). Search/jobs,
+   destinations CRUD, saved-searches (+ run), page shells, `/healthz`.
+   `FMF_FAKE_SCRAPER=1` swaps in a deterministic offline source for tests/e2e.
+   Integration tests in `tests/test_api.py`.
+6. ⏳ **NEXT** — Frontend (light theme → dark mode → mobile responsive) + e2e.
 7. ⏳ Dockerfile + docker-compose (Playwright-capable image — base
    image `mcr.microsoft.com/playwright/python:v1.49.1-jammy` is the
    path of least resistance; the alternative is a slim image plus
