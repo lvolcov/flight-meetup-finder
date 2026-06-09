@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Flight Meetup Finder{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <script>
+    // Set the colour scheme before first paint to avoid a flash.
+    (function () {
+      try {
+        var t = localStorage.getItem('fmf-theme');
+        if (!t) {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = t;
+      } catch (e) { /* localStorage unavailable */ }
+    })();
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">✈&nbsp;Flight&nbsp;Meetup&nbsp;Finder</a>
+    <nav class="nav">
+      <a href="/">Search</a>
+      <a href="/saved">Saved</a>
+      <button id="theme-toggle" class="icon-btn" type="button"
+              aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    Self-hosted · scrapes Google&nbsp;Flights via <code>fast-flights</code> ·
+    prices indicative, verify before booking.
+  </footer>
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

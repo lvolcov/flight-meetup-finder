@@ -36,6 +36,17 @@ async def create_and_enqueue(
     return JobCreated(job_id=job_id, estimated_queries=estimate)
 
 
+@router.post("/estimate")
+async def post_estimate(
+    request: SearchRequest,
+    db_path: Path = Depends(get_db_path),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, int]:
+    """Return the query count a search would trigger, without creating a job."""
+    estimate = await estimate_queries(db_path, request, settings.traveller_a_origin)
+    return {"estimated_queries": estimate}
+
+
 @router.post("/search", response_model=JobCreated)
 async def post_search(
     request: SearchRequest,

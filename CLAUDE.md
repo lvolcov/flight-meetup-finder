@@ -56,8 +56,14 @@ server in Docker. Full spec is in `REQUIREMENTS.md`.
    destinations CRUD, saved-searches (+ run), page shells, `/healthz`.
    `FMF_FAKE_SCRAPER=1` swaps in a deterministic offline source for tests/e2e.
    Integration tests in `tests/test_api.py`.
-6. ⏳ **NEXT** — Frontend (light theme → dark mode → mobile responsive) + e2e.
-7. ⏳ Dockerfile + docker-compose (Playwright-capable image — base
+6. ✅ Frontend: Jinja templates (`base/index/results/saved/_traveller_filters`),
+   `static/css/theme.css` (light + dark, responsive at 380px),
+   `static/js/app.js` (theme, tabs, live estimate, polling results with
+   client-side re-sort/re-filter, saved searches, destination manager).
+   Playwright e2e in `tests/e2e/` (run with `pytest tests/e2e -o addopts=""`;
+   they spin up uvicorn with `FMF_FAKE_SCRAPER=1` + headless Chromium).
+   5 e2e tests passing; the default `pytest -q` ignores `tests/e2e`.
+7. ⏳ **NEXT** — Dockerfile + docker-compose (Playwright-capable image — base
    image `mcr.microsoft.com/playwright/python:v1.49.1-jammy` is the
    path of least resistance; the alternative is a slim image plus
    `playwright install --with-deps chromium`).

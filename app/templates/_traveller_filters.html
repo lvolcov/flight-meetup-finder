@@ -1,0 +1,28 @@
+{# Per-traveller leg filters (F-7..F-9). Reused for A and B. #}
+<label>Outbound time
+  <select data-leg="outbound">
+    <option value="any">Any</option>
+    <option value="morning">Morning (06–12)</option>
+    <option value="afternoon">Afternoon (12–18)</option>
+    <option value="evening">Evening (18–24)</option>
+  </select>
+</label>
+<label>Return time
+  <select data-leg="return">
+    <option value="any">Any</option>
+    <option value="morning">Morning (06–12)</option>
+    <option value="afternoon">Afternoon (12–18)</option>
+    <option value="evening">Evening (18–24)</option>
+  </select>
+</label>
+<label>Max journey (hours)
+  <input type="number" data-field="max_duration_hours" min="0" step="0.5"
+         placeholder="any">
+</label>
+<label>Max stops
+  <select data-field="max_stops">
+    <option value="any">Any</option>
+    <option value="one">≤ 1</option>
+    <option value="direct">Direct only</option>
+  </select>
+</label>

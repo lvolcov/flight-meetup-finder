@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Results · Flight Meetup Finder{% endblock %}
+{% block content %}
+<a class="back" href="/">← New search</a>
+<h1 class="page-title">Results</h1>
+
+<div id="results-root" data-job-id="{{ job_id }}">
+  <div class="status-bar">
+    <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+    <p class="status-text"><span id="status-text">Starting…</span>
+      <button type="button" class="btn ghost small" id="cancel-job">Cancel</button>
+    </p>
+  </div>
+
+  <div class="controls card">
+    <label>Sort by
+      <select id="sort-by">
+        <option value="combined_gbp">Combined price</option>
+        <option value="total_duration">Total duration</option>
+        <option value="arrival_gap_minutes">Arrival gap</option>
+      </select>
+    </label>
+    <label>Max price (£)
+      <input type="number" id="filter-price" min="0" step="10" placeholder="any">
+    </label>
+    <label>Max stops (per leg)
+      <select id="filter-stops">
+        <option value="any">Any</option>
+        <option value="1">≤ 1</option>
+        <option value="0">Direct</option>
+      </select>
+    </label>
+    <span class="result-count" id="result-count"></span>
+  </div>
+
+  <div id="results" class="results"></div>
+
+  <section id="hidden-city" hidden>
+    <h2 class="section-title">Hidden-city via Lisbon</h2>
+    <p class="disclaimer">
+      <strong>Warning.</strong> Hidden-city ticketing breaches airline
+      conditions of carriage. Hand luggage only; book one-ways; skipping a leg
+      cancels the remainder of the ticket. Our data source cannot confirm a
+      Lisbon connection, so these are <em>unverified</em> Google&nbsp;Flights
+      links to check manually.
+    </p>
+    <div id="hidden-city-list" class="results"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.FMF_PAGE = 'results';</script>{% endblock %}

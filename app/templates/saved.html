@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Saved searches · Flight Meetup Finder{% endblock %}
+{% block content %}
+<h1 class="page-title">Saved searches</h1>
+<p class="lede">Re-run a named filter set with one tap.</p>
+<div id="saved-root">
+  <div id="saved-list" class="results"></div>
+  <p id="saved-empty" class="hint" hidden>No saved searches yet — build one on
+    the <a href="/">search page</a> and hit “Save search”.</p>
+</div>
+
+<h2 class="section-title">Candidate destinations</h2>
+<p class="hint">Toggle which cities the meetup search considers, or add one by
+  IATA code.</p>
+<form id="add-dest" class="inline-form">
+  <input type="text" id="add-dest-code" maxlength="3" placeholder="IATA e.g. LHR"
+         aria-label="IATA code">
+  <button type="submit" class="btn ghost small">Add</button>
+</form>
+<div id="dest-manage" class="dest-grid"></div>
+{% endblock %}
+{% block scripts %}<script>window.FMF_PAGE = 'saved';</script>{% endblock %}

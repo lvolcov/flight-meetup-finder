@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Search · Flight Meetup Finder{% endblock %}
+{% block content %}
+<h1 class="page-title">Find a meetup</h1>
+<p class="lede">
+  Cheap, timing-compatible flights for {{ traveller_a }} ({{ a_origin }}) and
+  {{ traveller_b }} ({{ b_origins|join('/') }}) to a shared European city —
+  or a one-way visit to Portugal.
+</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab is-active" data-tab="meetup" role="tab">Meetup</button>
+  <button class="tab" data-tab="visit" role="tab">Visit Portugal</button>
+</div>
+
+<form id="search-form" class="card form"
+      data-a-origin="{{ a_origin }}"
+      data-b-origins="{{ b_origins|join(',') }}">
+
+  <input type="hidden" name="mode" id="mode" value="meetup">
+
+  <!-- Dates -->
+  <details class="accordion" open>
+    <summary>Dates &amp; trip length</summary>
+    <div class="accordion-body grid-2">
+      <label>Outbound from
+        <input type="date" name="outbound_start" required></label>
+      <label>Outbound to
+        <input type="date" name="outbound_end" required></label>
+      <fieldset class="weekdays" data-weekdays="outbound">
+        <legend>Outbound weekdays</legend>
+        {% for wd in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+        <label class="chk"><input type="checkbox" value="{{ loop.index0 }}">{{ wd }}</label>
+        {% endfor %}
+      </fieldset>
+      <label>Return from
+        <input type="date" name="return_start" required></label>
+      <label>Return to
+        <input type="date" name="return_end" required></label>
+      <fieldset class="weekdays" data-weekdays="return">
+        <legend>Return weekdays</legend>
+        {% for wd in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+        <label class="chk"><input type="checkbox" value="{{ loop.index0 }}">{{ wd }}</label>
+        {% endfor %}
+      </fieldset>
+      <label>Min nights
+        <input type="number" name="min_nights" min="1" value="2" required></label>
+      <label>Max nights
+        <input type="number" name="max_nights" min="1" value="5" required></label>
+    </div>
+  </details>
+
+  <!-- Destinations -->
+  <details class="accordion" open>
+    <summary>Destinations</summary>
+    <div class="accordion-body">
+      <div data-mode-only="meetup">
+        <p class="hint">Search these candidate cities (manage the full list on
+          the <a href="/saved">Saved</a> page). All enabled by default.</p>
+        <div id="dest-list" class="dest-grid"></div>
+        <fieldset class="weekdays" id="b-origins">
+          <legend>{{ traveller_b }} departs from</legend>
+          {% for code in b_origins %}
+          <label class="chk"><input type="checkbox" value="{{ code }}"
+            {% if loop.first %}checked{% endif %}>{{ code }}</label>
+          {% endfor %}
+        </fieldset>
+      </div>
+      <div data-mode-only="visit" hidden>
+        <fieldset class="weekdays" id="visit-targets">
+          <legend>Portugal airports</legend>
+          {% for code in b_origins %}
+          <label class="chk"><input type="checkbox" value="{{ code }}"
+            {% if loop.first %}checked{% endif %}>{{ code }}</label>
+          {% endfor %}
+        </fieldset>
+        <label class="chk hidden-city">
+          <input type="checkbox" name="hidden_city">
+          Include hidden-city via Lisbon (manual check)
+        </label>
+      </div>
+    </div>
+  </details>
+
+  <!-- Traveller A -->
+  <details class="accordion">
+    <summary>{{ traveller_a }} ({{ a_origin }}) — time, duration, stops</summary>
+    <div class="accordion-body grid-2" data-traveller="a">
+      {% include "_traveller_filters.html" %}
+    </div>
+  </details>
+
+  <!-- Traveller B (meetup only) -->
+  <details class="accordion" data-mode-only="meetup">
+    <summary>{{ traveller_b }} — time, duration, stops</summary>
+    <div class="accordion-body grid-2" data-traveller="b">
+      {% include "_traveller_filters.html" %}
+    </div>
+  </details>
+
+  <!-- Sync + price caps -->
+  <details class="accordion">
+    <summary>Sync &amp; price caps</summary>
+    <div class="accordion-body grid-2">
+      <label data-mode-only="meetup">Max arrival gap (hours)
+        <input type="number" name="max_arrival_gap_hours" min="0" step="0.5"
+               placeholder="any"></label>
+      <label data-mode-only="meetup">Max departure gap (hours)
+        <input type="number" name="max_departure_gap_hours" min="0" step="0.5"
+               placeholder="any"></label>
+      <label data-mode-only="meetup">Max combined price (£)
+        <input type="number" name="max_combined_gbp" min="0" step="10"
+               placeholder="no cap"></label>
+      <label data-mode-only="visit" hidden>Max price (£)
+        <input type="number" name="max_price_gbp" min="0" step="10"
+               placeholder="no cap"></label>
+    </div>
+  </details>
+
+  <div class="estimate-bar">
+    <span id="estimate" class="estimate">Estimating…</span>
+    <span id="estimate-warn" class="warn" hidden>That's a lot of scrapes — it
+      will be slow.</span>
+  </div>
+
+  <div class="actions">
+    <button type="submit" class="btn primary" id="launch">Search flights</button>
+    <button type="button" class="btn ghost" id="save-search">Save search</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script>window.FMF_PAGE = 'index';</script>{% endblock %}

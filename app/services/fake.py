@@ -19,14 +19,22 @@ class DeterministicFlightsService:
     async def search_one_way(
         self, origin: str, destination: str, flight_date: date
     ) -> list[Flight]:
-        """Return three reproducible options for any one-way query."""
+        """Return three reproducible options that vary per destination.
+
+        Prices and durations are derived from the destination code so that
+        different destinations produce genuinely different rankings — which
+        makes client-side re-sort observable in the UI and e2e tests.
+        """
         currency = "GBP" if origin == "MAN" else "EUR"
         base = datetime.combine(flight_date, datetime.min.time())
-        # Cheap fares cluster around midday so meetup arrival gaps stay small.
+        seed = sum(ord(c) for c in destination)
+        price_base = 60 + seed % 80
+        dur_base = 90 + seed % 60
+        # Fares cluster around midday so meetup arrival gaps stay small.
         specs = [
-            ("TestAir", 11, 13, 120, 0, 90.0),
-            ("MockJet", 9, 12, 180, 1, 70.0),
-            ("DemoWings", 18, 20, 110, 0, 130.0),
+            ("TestAir", 11, 13, dur_base, 0, price_base),
+            ("MockJet", 9, 12, dur_base + 60, 1, price_base - 15),
+            ("DemoWings", 18, 20, dur_base - 10, 0, price_base + 45),
         ]
         flights: list[Flight] = []
         for airline, dep_h, arr_h, dur, stops, price in specs:
@@ -35,9 +43,9 @@ class DeterministicFlightsService:
                     airline=airline,
                     depart_dt=base + timedelta(hours=dep_h),
                     arrive_dt=base + timedelta(hours=arr_h),
-                    duration_minutes=dur,
+                    duration_minutes=max(30, dur),
                     stops=stops,
-                    price_amount=price,
+                    price_amount=float(price),
                     price_currency=currency,
                     is_best=airline == "TestAir",
                 )
