@@ -45,16 +45,41 @@ server in Docker. Full spec is in `REQUIREMENTS.md`.
 1. ✅ Docs + project skeleton (`README`, `REQUIREMENTS`, `ARCHITECTURE`,
    `CLAUDE.md`, `.env.example`, `.gitignore`).
 2. ✅ Verify `fast-flights` API with a real query (see "Verified" below).
-3. ⏳ Core logic + unit tests (date pairs, filters, gap matching, ranking).
-4. ⏳ `services/flights.py` wrapper + SQLite cache + job runner.
+3. ✅ Core logic + unit tests (date pairs, filters, gap matching, ranking).
+   17 pytest tests passing.
+4. ⏳ **NEXT** — `services/flights.py` wrapper (parse fast-flights strings
+   into `Flight` dataclasses) + SQLite cache layer + asyncio job runner.
 5. ⏳ FastAPI endpoints (search, jobs, saved searches, destinations).
 6. ⏳ Frontend (light theme → dark mode → mobile responsive).
-7. ⏳ Dockerfile + docker-compose (Playwright-capable image).
-8. ⏳ Push to private GitHub repo `flight-meetup-finder` via `gh`.
+7. ⏳ Dockerfile + docker-compose (Playwright-capable image — base
+   image `mcr.microsoft.com/playwright/python:v1.49.1-jammy` is the
+   path of least resistance; the alternative is a slim image plus
+   `playwright install --with-deps chromium`).
+8. ✅ Private GitHub repo created and pushed:
+   <https://github.com/lvolcov/flight-meetup-finder>.
 
 The user explicitly asked for **slow, incremental** progress — do **not**
-attempt steps 3–8 in one session unless explicitly asked. Each session
-should pick the next pending step and commit when done.
+attempt steps 4–7 all in one session unless explicitly asked. Each
+session should pick the next pending step and commit + push when done.
+
+## What's in the repo (current state)
+
+```
+app/
+  core/
+    date_pairs.py   # DateWindow + generate_date_pairs
+    models.py       # Flight, TimeRule, Stops, LegFilter dataclasses
+    filters.py      # filter_flights, cheapest
+    matching.py     # MeetupCandidate, match_meetup, gap_minutes
+    ranking.py      # by_combined_price / arrival_gap / total_duration
+  api/ services/ models/ templates/ static/   # empty, awaiting steps 4-6
+tests/
+  test_date_pairs.py    test_filters.py    test_matching.py   (17 tests)
+```
+
+The `app.core` package is intentionally framework-free — nothing in it
+imports FastAPI, Pydantic, SQLite, or fast-flights. That boundary must
+be preserved when steps 4–5 are added.
 
 ## Verified (2026-06-09)
 
