@@ -238,6 +238,37 @@ async def get_job(db_path: Path, job_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+async def list_jobs(db_path: Path, limit: int = 10) -> list[dict]:
+    """Return the most recent jobs, newest first (for the recent-searches UI)."""
+    async with aiosqlite.connect(db_path) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (
+            await conn.execute(
+                "SELECT id, mode, status, queries_total, queries_done, "
+                "queries_failed, created_at FROM jobs "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+async def list_unfinished_job_ids(db_path: Path) -> list[str]:
+    """Return ids of pending/running jobs, oldest first (startup recovery).
+
+    A container restart loses the in-memory queue; these jobs would otherwise
+    sit in 'running' forever. The lifespan re-enqueues them on boot.
+    """
+    async with aiosqlite.connect(db_path) as conn:
+        rows = await (
+            await conn.execute(
+                "SELECT id FROM jobs WHERE status IN ('pending', 'running') "
+                "ORDER BY created_at"
+            )
+        ).fetchall()
+    return [row[0] for row in rows]
+
+
 async def get_job_status(db_path: Path, job_id: str) -> str | None:
     """Return just a job's status (used for cancellation checks)."""
     async with aiosqlite.connect(db_path) as conn:
@@ -302,6 +333,13 @@ async def add_result(
                 _now(),
             ),
         )
+        await conn.commit()
+
+
+async def clear_results(db_path: Path, job_id: str) -> None:
+    """Delete a job's results (used when a resumed job re-evaluates)."""
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
         await conn.commit()
 
 

@@ -145,10 +145,25 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .btn.small { padding: .35rem .7rem; font-size: .85rem; }
 .inline-form { display: flex; gap: .5rem; margin: .5rem 0 1rem; }
 
+/* Recent searches ------------------------------------------------------ */
+.job-list { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1.25rem; }
+.job-row {
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: .6rem .9rem;
+  text-decoration: none; color: var(--text); font-size: .9rem;
+}
+.job-row:hover { border-color: var(--accent); }
+.job-icon { width: 1.4rem; text-align: center; color: var(--accent-strong); font-weight: 700; }
+.job-row[data-status="failed"] .job-icon { color: var(--warn-text); }
+.job-meta { flex: 1; color: var(--text-soft); }
+.job-meta strong { color: var(--text); text-transform: capitalize; }
+.progress.mini { width: 90px; height: 6px; flex: none; display: inline-block; }
+
 /* Results ------------------------------------------------------------- */
 .status-bar { margin: 1rem 0; }
 .progress { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-.progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+.progress-fill { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
 .status-text { display: flex; align-items: center; gap: .75rem; color: var(--text-soft); }
 
 .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin-bottom: 1rem; }

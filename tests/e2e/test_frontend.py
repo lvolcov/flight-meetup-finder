@@ -68,6 +68,72 @@ def test_search_streams_results(page: Page, base_url: str) -> None:
     assert page.locator(".result").count() >= 1
 
 
+def test_dates_use_british_format(page: Page, base_url: str) -> None:
+    page.goto(base_url + "/")
+    field = page.locator('input[name="outbound_start"]')
+    assert field.get_attribute("placeholder") == "dd/mm/yyyy"
+    # The JS defaults are written in dd/mm/yyyy.
+    assert field.input_value().count("/") == 2
+    day = field.input_value().split("/")[0]
+    assert 1 <= int(day) <= 31
+
+    # Entering explicit dd/mm/yyyy dates must survive the round trip to the
+    # API (which speaks ISO) and come back on the result card.
+    page.wait_for_selector("#dest-list input[type=checkbox]")
+    page.fill('input[name="outbound_start"]', "15/07/2026")
+    page.fill('input[name="outbound_end"]', "15/07/2026")
+    page.fill('input[name="return_start"]', "18/07/2026")
+    page.fill('input[name="return_end"]', "18/07/2026")
+    page.fill('input[name="min_nights"]', "3")
+    page.fill('input[name="max_nights"]', "3")
+    page.evaluate(
+        """() => {
+            const boxes = Array.from(
+                document.querySelectorAll('#dest-list input[type=checkbox]'));
+            boxes.forEach((b, i) => { b.checked = i < 1; });
+        }"""
+    )
+    # 15/07 must be parsed as 15 July, not the 7th of month 15.
+    expect(page.locator("#estimate")).to_contain_text("scrape", timeout=5000)
+    page.click("#launch")
+    page.wait_for_url("**/search/**")
+    expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
+    expect(page.locator(".result .badge").first).to_contain_text("15 Jul → 18 Jul")
+
+
+def test_running_search_visible_after_navigating_away(
+    page: Page, base_url: str, browser: object
+) -> None:
+    _start_narrow_search(page, base_url)
+    job_url = page.url
+    expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
+
+    # Leaving the results page must not lose the search: the home page lists
+    # it with a link back to the live view.
+    page.goto(base_url + "/")
+    page.wait_for_selector("#recent-jobs .job-row")
+    row = page.locator("#recent-jobs .job-row").first
+    expect(row).to_contain_text("meetup")
+    href = row.get_attribute("href")
+    assert href and job_url.endswith(href)
+
+    # A completely separate browser context (e.g. the phone) sees it too —
+    # the list comes from the server, not this browser's storage.
+    other = browser.new_context()  # type: ignore[attr-defined]
+    try:
+        phone = other.new_page()
+        phone.goto(base_url + "/")
+        phone.wait_for_selector("#recent-jobs .job-row")
+        assert phone.locator("#recent-jobs .job-row").count() >= 1
+        phone.locator("#recent-jobs .job-row").first.click()
+        phone.wait_for_url("**/search/**")
+        expect(phone.locator("#status-text")).to_contain_text(
+            "done", timeout=15000
+        )
+    finally:
+        other.close()
+
+
 def test_client_side_resort(page: Page, base_url: str) -> None:
     _start_narrow_search(page, base_url)
     expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)

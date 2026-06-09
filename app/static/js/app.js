@@ -54,6 +54,19 @@ function fmtDate(iso) {
 }
 function stopsLabel(n) { return n === 0 ? 'direct' : `${n} stop${n > 1 ? 's' : ''}`; }
 
+/* Dates are entered as dd/mm/yyyy (British) and sent to the API as ISO. */
+function ukToISO(value) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  if (+mm < 1 || +mm > 12 || +dd < 1 || +dd > 31) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+function isoToUK(iso) {
+  const [yyyy, mm, dd] = iso.split('-');
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 /* =================================================================== */
 /* Index page                                                          */
 /* =================================================================== */
@@ -82,13 +95,19 @@ function weekdays(which) {
 function gatherRequest() {
   const form = $('#search-form');
   const mode = form.mode.value;
+  const dates = {};
+  for (const field of ['outbound_start', 'outbound_end', 'return_start', 'return_end']) {
+    const iso = ukToISO(form[field].value);
+    if (!iso) throw new Error(`Enter ${field.replace('_', ' ')} as dd/mm/yyyy`);
+    dates[field] = iso;
+  }
   const req = {
     mode,
-    outbound_start: form.outbound_start.value,
-    outbound_end: form.outbound_end.value,
+    outbound_start: dates.outbound_start,
+    outbound_end: dates.outbound_end,
     outbound_weekdays: weekdays('outbound'),
-    return_start: form.return_start.value,
-    return_end: form.return_end.value,
+    return_start: dates.return_start,
+    return_end: dates.return_end,
     return_weekdays: weekdays('return'),
     min_nights: parseInt(form.min_nights.value, 10),
     max_nights: parseInt(form.max_nights.value, 10),
@@ -128,15 +147,15 @@ function applyMode(mode) {
 function setDefaultDates() {
   const form = $('#search-form');
   if (form.outbound_start.value) return;
-  const iso = (days) => {
+  const uk = (days) => {
     const d = new Date();
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    return isoToUK(d.toISOString().slice(0, 10));
   };
-  form.outbound_start.value = iso(30);
-  form.outbound_end.value = iso(37);
-  form.return_start.value = iso(33);
-  form.return_end.value = iso(44);
+  form.outbound_start.value = uk(30);
+  form.outbound_end.value = uk(37);
+  form.return_start.value = uk(33);
+  form.return_end.value = uk(44);
 }
 
 async function loadDestinationChecklist() {
@@ -149,6 +168,35 @@ async function loadDestinationChecklist() {
       `${r.iata} · ${r.name}</label>`).join('');
   } catch (e) {
     box.innerHTML = '<p class="hint">Could not load destinations.</p>';
+  }
+}
+
+/* Recent searches (server-side jobs) — visible from any device, and they
+   keep running even if the page that launched them is closed. */
+const JOB_STATUS_ICON = {
+  pending: '…', running: '▶', done: '✓', failed: '✕', cancelled: '⊘',
+};
+async function loadRecentJobs() {
+  const box = $('#recent-jobs');
+  if (!box) return;
+  let jobs = [];
+  try { jobs = await getJSON('/api/jobs'); } catch (e) { return; }
+  $('#recent-jobs-section').hidden = jobs.length === 0;
+  box.innerHTML = jobs.map((j) => {
+    const pct = j.queries_total
+      ? Math.round((j.queries_done / j.queries_total) * 100) : 0;
+    const live = j.status === 'running' || j.status === 'pending';
+    const detail = live
+      ? `${j.queries_done}/${j.queries_total} queries`
+      : fmtDateTime(j.created_at);
+    return `<a class="job-row" href="/search/${j.id}" data-status="${j.status}">` +
+      `<span class="job-icon">${JOB_STATUS_ICON[j.status] || '?'}</span>` +
+      `<span class="job-meta"><strong>${j.mode}</strong> · ${j.status} · ${detail}</span>` +
+      `<span class="progress mini"><span class="progress-fill" style="width:${pct}%"></span></span>` +
+      `</a>`;
+  }).join('');
+  if (jobs.some((j) => j.status === 'running' || j.status === 'pending')) {
+    setTimeout(loadRecentJobs, 2000);
   }
 }
 
@@ -174,6 +222,7 @@ function initIndex() {
   applyMode('meetup');
   setDefaultDates();
   loadDestinationChecklist().then(refreshEstimate);
+  loadRecentJobs();
 
   $$('.tab').forEach((tab) =>
     tab.addEventListener('click', () => {

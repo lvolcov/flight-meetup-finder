@@ -93,9 +93,65 @@ def test_search_flow(client: TestClient) -> None:
     assert "deep_link" in result["traveller_a"]["outbound"]
 
 
+def test_list_jobs_shows_recent_searches(client: TestClient) -> None:
+    # No jobs yet.
+    assert client.get("/api/jobs").json() == []
+
+    created = client.post("/api/search", json=_meetup_body()).json()
+    jobs = client.get("/api/jobs").json()
+    assert len(jobs) == 1
+    summary = jobs[0]
+    assert summary["id"] == created["job_id"]
+    assert summary["mode"] == "meetup"
+    assert summary["status"] in {"pending", "running", "done"}
+    assert summary["queries_total"] == 4
+
+    # After completion the same listing reflects the final state, so a
+    # different device polling /api/jobs can find and follow the search.
+    _poll(client, created["job_id"])
+    jobs = client.get("/api/jobs").json()
+    assert jobs[0]["status"] == "done"
+    assert jobs[0]["queries_done"] == 4
+
+
 def test_cancel_unknown_job_404(client: TestClient) -> None:
     assert client.post("/api/jobs/nope/cancel").status_code == 404
     assert client.get("/api/jobs/nope").status_code == 404
+
+
+def test_orphaned_job_resumes_on_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job left 'running' by a restart must finish after the app reboots."""
+    import asyncio
+    import json
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'fmf.db'}")
+    monkeypatch.setenv("FMF_FAKE_SCRAPER", "1")
+    monkeypatch.setenv("SCRAPE_DELAY_SECONDS", "0")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    from app.main import create_app
+    from app.services import db as dbsvc
+
+    db_path = tmp_path / "fmf.db"
+
+    async def seed() -> None:
+        await dbsvc.init_db(db_path)
+        await dbsvc.create_job(
+            db_path, "orphan", "meetup", json.dumps(_meetup_body()), 4
+        )
+        # Simulate the state a container restart leaves behind.
+        await dbsvc.set_job_status(db_path, "orphan", "running")
+
+    asyncio.run(seed())
+
+    with TestClient(create_app()) as test_client:
+        body = _poll(test_client, "orphan")
+        assert body["status"] == "done"
+        assert len(body["results"]) == 1  # no duplicates from the re-run
+    get_settings.cache_clear()
 
 
 def test_saved_search_create_and_run(client: TestClient) -> None:

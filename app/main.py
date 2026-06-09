@@ -56,6 +56,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner = JobRunner(db_path, service, settings)
     await runner.start()
 
+    # Resume searches interrupted by a restart — already-scraped queries are
+    # served from cache, so resumption is cheap and results are kept.
+    for job_id in await db.list_unfinished_job_ids(db_path):
+        await runner.enqueue(job_id)
+
     app.state.settings = settings
     app.state.db_path = db_path
     app.state.service = service

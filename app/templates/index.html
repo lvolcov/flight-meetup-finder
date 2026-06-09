@@ -8,6 +8,13 @@
   or a one-way visit to Portugal.
 </p>
 
+<section id="recent-jobs-section" hidden>
+  <h2 class="section-title">Searches</h2>
+  <p class="hint">Searches keep running on the server even if you close this
+    page — tap one to see its live progress and results, from any device.</p>
+  <div id="recent-jobs" class="job-list"></div>
+</section>
+
 <div class="tabs" role="tablist">
   <button class="tab is-active" data-tab="meetup" role="tab">Meetup</button>
   <button class="tab" data-tab="visit" role="tab">Visit Portugal</button>
@@ -24,9 +31,11 @@
     <summary>Dates &amp; trip length</summary>
     <div class="accordion-body grid-2">
       <label>Outbound from
-        <input type="date" name="outbound_start" required></label>
+        <input type="text" name="outbound_start" inputmode="numeric"
+               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
       <label>Outbound to
-        <input type="date" name="outbound_end" required></label>
+        <input type="text" name="outbound_end" inputmode="numeric"
+               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
       <fieldset class="weekdays" data-weekdays="outbound">
         <legend>Outbound weekdays</legend>
         {% for wd in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
@@ -34,9 +43,11 @@
         {% endfor %}
       </fieldset>
       <label>Return from
-        <input type="date" name="return_start" required></label>
+        <input type="text" name="return_start" inputmode="numeric"
+               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
       <label>Return to
-        <input type="date" name="return_end" required></label>
+        <input type="text" name="return_end" inputmode="numeric"
+               placeholder="dd/mm/yyyy" pattern="\d{2}/\d{2}/\d{4}" required></label>
       <fieldset class="weekdays" data-weekdays="return">
         <legend>Return weekdays</legend>
         {% for wd in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}

@@ -129,6 +129,18 @@ class JobCreated(BaseModel):
     estimated_queries: int
 
 
+class JobSummary(BaseModel):
+    """One row in the recent-searches list (``GET /api/jobs``)."""
+
+    id: str
+    mode: str
+    status: str
+    queries_total: int
+    queries_done: int
+    queries_failed: int
+    created_at: str
+
+
 class JobStatus(BaseModel):
     """Response to ``GET /api/jobs/{id}`` — status, counts and results."""
 

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_db_path, get_runner, get_settings
 from app.config import Settings
-from app.models.schemas import JobCreated, JobStatus, SearchRequest
+from app.models.schemas import JobCreated, JobStatus, JobSummary, SearchRequest
 from app.services import db
 from app.services.jobs import JobRunner, estimate_queries
 
@@ -56,6 +56,15 @@ async def post_search(
 ) -> JobCreated:
     """Create a background search job and return its id + query estimate."""
     return await create_and_enqueue(request, db_path, settings, runner)
+
+
+@router.get("/jobs", response_model=list[JobSummary])
+async def list_jobs(
+    limit: int = 10, db_path: Path = Depends(get_db_path)
+) -> list[JobSummary]:
+    """Return recent jobs so any device can find a running search again."""
+    rows = await db.list_jobs(db_path, limit=min(max(limit, 1), 50))
+    return [JobSummary(**row) for row in rows]
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatus)

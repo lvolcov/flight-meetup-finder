@@ -179,6 +179,9 @@ class JobRunner:
             return
         request = SearchRequest.model_validate_json(job["filters_json"])
         await db.set_job_status(self._db_path, job_id, "running")
+        # A resumed job re-evaluates every tuple; drop any earlier rows so
+        # results are never duplicated (re-scrapes are absorbed by the cache).
+        await db.clear_results(self._db_path, job_id)
 
         a_origin = self._settings.traveller_a_origin
         destinations = await resolve_destinations(self._db_path, request)
