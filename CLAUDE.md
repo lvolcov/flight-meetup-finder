@@ -11,130 +11,191 @@ commits, no over-engineering).
 
 A self-hosted web tool that finds cheap, timing-compatible return
 flights for two people from two different European origins to a common
-destination, plus a one-way "visit Portugal" mode. Runs on Lucas's home
-server in Docker. Full spec is in `REQUIREMENTS.md`.
+destination, plus a one-way "visit Portugal" mode. Full spec is in
+`REQUIREMENTS.md`.
+
+**Status: built, deployed and in real use.** The app runs on Lucas's
+Ubuntu home server (`192.168.1.107`) at port `8742`, deployed from
+`/opt/flight-meetup-finder` via the server's central
+`/opt/docker-compose.yml` (which also runs Pi-hole, Home Assistant,
+Plex, Immich, etc.). Future work is enhancement/maintenance only.
 
 ## Stack (decided, don't second-guess)
 
 - Python 3.12 + FastAPI, Jinja2 templates, vanilla JS/CSS frontend.
   **No React, no bundler.**
-- SQLite on a Docker volume. **No external DB, no Redis, no Celery.**
-- Background work via `asyncio.Task` in the same process.
+- SQLite via aiosqlite. **No external DB, no Redis, no Celery.**
+- Background work via a single `asyncio.Task` in the same process.
 - `fast-flights` (pinned to **2.2**) for flight data, behind a service
   wrapper. **Must use `fetch_mode="local"`** (Playwright) — the other
   modes are broken (see `ARCHITECTURE.md` §4).
-- Docker + docker-compose, single service, host port `8742` →
-  container `8000`.
+- Docker base image `mcr.microsoft.com/playwright/python:v1.49.1-noble`
+  (**NOT `-jammy`** — jammy ships Python 3.10, which lacks
+  `datetime.UTC`; noble ships 3.12). Host port `8742` → container `8000`.
 
 ## Conventions
 
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`,
-  `test:`. Logical incremental commits, not one big dump.
+  `test:`. Logical incremental commits, not one big dump. Push to
+  `origin/master` when a piece of work is done and tested.
 - All function signatures get type hints; Google-style docstrings.
 - `pathlib` over `os.path`. f-strings over `.format`. `httpx` over
   `requests` for async.
-- Pydantic models for every request/response schema.
+- Pydantic v2 models for every request/response schema.
 - The fast-flights interaction lives **only** in `app/services/flights.py`.
   Anything elsewhere reaching for `fast_flights` is a bug.
-- Tests in `tests/`, pytest with fixtures. Mock the scraper. Cover
-  date-pair generation, time-window filtering, arrival/departure-gap
-  matching, price ranking.
-
-## Build order (from the original brief)
-
-1. ✅ Docs + project skeleton (`README`, `REQUIREMENTS`, `ARCHITECTURE`,
-   `CLAUDE.md`, `.env.example`, `.gitignore`).
-2. ✅ Verify `fast-flights` API with a real query (see "Verified" below).
-3. ✅ Core logic + unit tests (date pairs, filters, gap matching, ranking).
-   17 pytest tests passing.
-4. ✅ `services/flights.py` wrapper (parses fast-flights strings into `Flight`
-   dataclasses), SQLite layer (`services/db.py`), read-through cache
-   (`services/cache.py`) and asyncio job runner (`services/jobs.py`).
-   Pydantic request/response schemas in `app/models/schemas.py`,
-   settings in `app/config.py`. Tests: parsers + mocked end-to-end job.
-5. ✅ FastAPI endpoints + lifespan (`app/main.py`, `app/api/*`). Search/jobs,
-   destinations CRUD, saved-searches (+ run), page shells, `/healthz`.
-   `FMF_FAKE_SCRAPER=1` swaps in a deterministic offline source for tests/e2e.
-   Integration tests in `tests/test_api.py`.
-6. ✅ Frontend: Jinja templates (`base/index/results/saved/_traveller_filters`),
-   `static/css/theme.css` (light + dark, responsive at 380px),
-   `static/js/app.js` (theme, tabs, live estimate, polling results with
-   client-side re-sort/re-filter, saved searches, destination manager).
-   Playwright e2e in `tests/e2e/` (run with `pytest tests/e2e -o addopts=""`;
-   they spin up uvicorn with `FMF_FAKE_SCRAPER=1` + headless Chromium).
-   5 e2e tests passing; the default `pytest -q` ignores `tests/e2e`.
-7. ✅ Dockerfile + docker-compose. Base image
-   `mcr.microsoft.com/playwright/python:v1.49.1-**noble**` (NOT jammy — jammy
-   ships Python 3.10, which lacks `datetime.UTC`; noble ships 3.12, the
-   project target). Non-root `pwuser`, `.dockerignore`, named volume
-   `fmf-data` at `/data`, healthcheck on `/healthz`, host `${APP_PORT:-8742}`
-   → container `8000`. Verified: `docker compose up -d --build` →
-   container reports **healthy**, `/healthz` 200, 47 destinations seeded.
-8. ✅ Private GitHub repo created and pushed:
-   <https://github.com/lvolcov/flight-meetup-finder>.
-
-**ALL BUILD STEPS COMPLETE.** Future work is enhancement/maintenance only.
-The original brief asked for slow, incremental progress; a later session was
-explicitly authorised to complete steps 4–7 in one go, which it did.
+- The `app.core` package is framework-free — nothing in it imports
+  FastAPI, Pydantic, SQLite or fast-flights. Preserve that boundary.
+- Dates in the UI are **dd/mm/yyyy** (British). The API speaks ISO;
+  conversion happens client-side in `app.js` (`ukToISO`/`isoToUK`).
 
 ## What's in the repo (current state)
 
 ```
 app/
-  config.py         # pydantic-settings Settings (reads .env)
-  core/
+  main.py           # app factory + lifespan (DB init, job runner start,
+                    #   re-enqueue of unfinished jobs, FMF_FAKE_SCRAPER hook)
+  config.py         # pydantic-settings Settings (reads .env; NoDecode on
+                    #   TRAVELLER_B_ORIGINS so "LIS,OPO,FAO" parses)
+  core/             # pure logic, framework-free
     date_pairs.py   # DateWindow + generate_date_pairs
     models.py       # Flight, TimeRule, Stops, LegFilter dataclasses
     filters.py      # filter_flights, cheapest
     matching.py     # MeetupCandidate, match_meetup, gap_minutes
     ranking.py      # by_combined_price / arrival_gap / total_duration
   models/
-    schemas.py      # Pydantic v2 request/response schemas
+    schemas.py      # Pydantic v2 schemas (SearchRequest, JobStatus,
+                    #   JobSummary, Destination incl. schengen, SavedSearch…)
   services/
-    flights.py      # ONLY fast_flights importer; string parsers + service
-    seed_data.py    # IATA -> name seed map (REQUIREMENTS §6)
-    db.py           # aiosqlite schema, seed + CRUD (ARCHITECTURE §3)
-    cache.py        # read-through scrape cache (F-19)
-    jobs.py         # asyncio JobRunner, task expansion, query estimate
-  api/ templates/ static/   # empty, awaiting steps 5-6
+    flights.py      # ONLY fast_flights importer; parses '8:35 PM on Thu,
+                    #   Jul 9' / '3 hr 15 min' / '£99' into Flight; trip is
+                    #   ALWAYS one-way per (origin, dest, date) so legs are
+                    #   priced individually (Ryanair out + easyJet back)
+    fake.py         # DeterministicFlightsService (FMF_FAKE_SCRAPER=1) for
+                    #   tests/e2e/offline demos — never hits Google
+    seed_data.py    # IATA -> name seed map + NON_SCHENGEN_IATA set +
+                    #   is_schengen() (passport-control classification)
+    db.py           # aiosqlite schema + additive migrations (_migrate),
+                    #   seed, CRUD for all five tables
+    cache.py        # read-through scrape cache (TTL + jittered throttle)
+    jobs.py         # asyncio JobRunner: task expansion, retry-once/fail-soft,
+                    #   streams results, clears results on (re)run, estimate
+  api/
+    deps.py                 # typed accessors for app.state singletons
+    routes_jobs.py          # POST /api/estimate, POST /api/search,
+                            #   GET /api/jobs, GET /api/jobs/{id},
+                            #   POST /api/jobs/{id}/cancel
+    routes_destinations.py  # GET/POST/PATCH/DELETE /api/destinations
+    routes_saved.py         # GET/POST/DELETE /api/saved-searches, + /run
+    routes_pages.py         # GET /, /search/{job_id}, /saved (Jinja shells)
+  templates/        # base, index (search form), results, saved,
+                    #   _traveller_filters partial
+  static/
+    css/theme.css   # light (ivory/terracotta) + dark via CSS vars,
+                    #   responsive at 380px
+    js/app.js       # ALL frontend behaviour (theme, tabs, dd/mm/yyyy +
+                    #   calendar button, estimate, recent jobs, polling
+                    #   results, client-side re-sort/filter, Schengen toggle,
+                    #   saved searches, destination manager)
 tests/
-  test_date_pairs.py  test_filters.py  test_matching.py
-  test_flights_parsing.py  test_jobs.py   (41 tests)
+  test_date_pairs.py  test_filters.py  test_matching.py    # core logic
+  test_flights_parsing.py   # wrapper string parsers
+  test_jobs.py              # expansion, estimate, mocked end-to-end job,
+                            #   fail-soft, schema migration
+  test_api.py               # full ASGI integration incl. orphan-job resume
+  e2e/                      # Playwright frontend tests (real uvicorn +
+    conftest.py             #   FMF_FAKE_SCRAPER=1 + headless Chromium)
+    test_frontend.py
+Dockerfile  docker-compose.yml  .dockerignore  pytest.ini
 ```
 
-The `app.core` package is intentionally framework-free — nothing in it
-imports FastAPI, Pydantic, SQLite, or fast-flights. That boundary must
-be preserved when steps 4–5 are added.
+**Test counts as of 2026-06-10: 49 unit/integration + 9 e2e, all passing.**
+The default `pytest -q` ignores `tests/e2e` (needs a browser); run those
+with `pytest tests/e2e -o addopts=""`.
+
+## Features beyond the original brief (all shipped)
+
+- **Recent searches** (`GET /api/jobs` + home-page "Searches" section):
+  jobs run server-side, so any device (PC or phone) can find a running
+  search with live progress instead of losing it on navigation/refresh.
+- **Job resume on restart**: lifespan re-enqueues jobs left
+  pending/running; a resumed job clears its old result rows then
+  re-evaluates (cache absorbs the re-scrapes, so it's cheap).
+- **dd/mm/yyyy dates with native calendar**: text inputs + a 📅 button
+  that opens a hidden `type=date` input via `showPicker()` and writes
+  back dd/mm/yyyy. Plain `type=date` was rejected because its display
+  format follows browser locale (showed mm/dd/yyyy).
+- **Per-leg prices in GBP** on result cards (server adds `price_gbp` to
+  each leg payload; EUR legs also show the original € amount).
+- **Schengen classification + bulk-deselect**: `destinations.schengen`
+  column, classified from `NON_SCHENGEN_IATA` in `seed_data.py` (it's
+  **Schengen, not EU**, that decides passport control from Lisbon —
+  Talita cannot pass non-Schengen immigration: DUB is EU but excluded;
+  ZRH/OSL are non-EU but fine; RO/BG/HR are Schengen now). A "Schengen
+  only" toggle on the search form deselects the passport-control
+  destinations in one tap, persisted in localStorage. The DB migrates
+  automatically on boot (`db._migrate`, idempotent re-classification).
+- **`POST /api/estimate`**: live query-count estimate while editing the
+  form, without creating a job.
+- **`FMF_FAKE_SCRAPER=1`**: swaps in `DeterministicFlightsService`
+  (per-destination price variation so re-sort is observable). Used by
+  all e2e tests and the API integration tests.
+
+## Pricing model (user asked about this explicitly)
+
+Every scrape is an independent **one-way** query; the matcher picks the
+cheapest valid option per leg. Mixed-airline combinations are the point.
+Known limitation (be honest if it comes up): legacy-carrier round-trip
+*bundles* can occasionally beat the sum of two one-ways, and the tool
+cannot see those. Deep links per leg are one-way Google Flights searches.
 
 ## Verified (2026-06-09)
 
-- `fast-flights==2.2` on PyPI. API:
-  ```python
-  from fast_flights import FlightData, Passengers, Result, get_flights
+- `fast-flights==2.2`; `fetch_mode="local"` works (24 flights MAN→LIS).
+  Field shapes: `departure` `'8:35 PM on Thu, Jul 9'`, `duration`
+  `'3 hr 15 min'`, `price` `'£99'`/`'€120'`, `stops` int, `is_best` bool,
+  `arrival_time_ahead` `''` or `'+1'`.
+- `fetch_mode="fallback"` → 401 turnstile. `fetch_mode="common"` →
+  Google consent page. Both unusable.
+- fast-flights launches its own browser per `get_flights` call, so the
+  ARCHITECTURE §5 idea of reusing one browser context per job is **not
+  implemented** — it would require reaching into library internals.
+- No real end-to-end scrape has been verified *inside the container*;
+  the wrapper parsers are unit-tested against the verified string shapes.
+
+## Deployment (home server)
+
+- Repo cloned at `/opt/flight-meetup-finder`; `gh` CLI is authenticated
+  on the server (HTTPS + credential helper), so `git pull` works.
+- Service block lives in the central `/opt/docker-compose.yml` with a
+  **bind mount** `/opt/flight-meetup-finder/data:/data` (owned by UID
+  1001 = `pwuser`) rather than a named volume, so Duplicati's `/opt`
+  backup covers the SQLite DB. The app's own `docker-compose.yml` in the
+  repo is for standalone/local use and uses a named volume instead.
+- Update procedure:
+  ```bash
+  cd /opt/flight-meetup-finder && git pull && cd /opt
+  docker compose up -d --build flight-meetup-finder
+  curl -fsS http://localhost:8742/healthz
   ```
-- `fetch_mode="local"` returned 24 flights for `MAN→LIS` on a date
-  ~30 days out. Sample flight fields populated: `name` ('easyJet'),
-  `departure` ('8:35 PM on Thu, Jul 9'), `arrival` ('11:50 PM on Thu, Jul 9'),
-  `duration` ('3 hr 15 min'), `stops` (0), `price` ('£99'),
-  `is_best` (True). `arrival_time_ahead` was empty string,
-  `delay` was None.
-- `fetch_mode="fallback"` (library default) → **broken**: 401 from
-  upstream third-party turnstile validator.
-- `fetch_mode="common"` (direct scrape) → **broken**: Google consent
-  page returned instead of results.
-- Implication: the Docker image must install Playwright Chromium
-  (`playwright install chromium` at build time), and the wrapper must
-  parse the human-readable date strings into datetimes itself.
+  **`--build` is mandatory** — plain `up -d` reuses the stale image.
+- Pi-hole on the same server is the LAN's DNS; if the server "can't
+  resolve github.com", check `docker ps | grep pihole` first.
+- Host port 8000 belongs to another project (instagram-tracker); this
+  app must stay on 8742.
 
 ## Things the user has flagged
 
 - Hidden-city detection: `fast-flights` does not expose connection
-  airports. **Be honest in the UI** about this — fall back to a Google
-  Flights deep-link for manual verification rather than guessing.
+  airports. **Be honest in the UI** — Google Flights deep-link for
+  manual verification, never fabricated connection data.
 - Mobile is first-class. Test layouts at 380px width.
 - Anthropic-style theme: warm ivory background, terracotta accent
-  (`#CC785C` / `#DA7756`), serif headings (Lora / Source Serif 4),
-  Inter body.
+  (`#CC785C` / `#DA7756`), serif headings (Lora), Inter body.
+- Searches must never be "lost" by navigation, refresh or restarts —
+  that's why recent-jobs + resume exist. Don't regress this.
+- Talita can only fly within Schengen — keep the classification honest
+  and up to date if memberships change.
 
 ## Things NOT to do
 
@@ -142,8 +203,13 @@ be preserved when steps 4–5 are added.
   second database. Don't add auth.
 - Don't claim hidden-city LIS detection works if the library doesn't
   surface connection airports — surface the limitation.
-- Don't run a real scrape inside the test suite. Mock it.
+- Don't run a real scrape inside the test suite. Mock it
+  (`FMF_FAKE_SCRAPER=1` or a fake service class).
 - Don't commit `data/fmf.db`, `.env`, or `.venv/`.
+- Don't switch the Docker base image back to `-jammy` (Python 3.10).
+- Don't use `<input type="date">` directly for the date fields — its
+  display format follows browser locale, which is the bug the calendar
+  button + text field design fixed.
 
 ## How to run locally during development
 
@@ -151,20 +217,22 @@ be preserved when steps 4–5 are added.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-playwright install chromium
+playwright install chromium            # needed for e2e + real scraping
 uvicorn app.main:app --reload --port 8742
+# offline (no Google): FMF_FAKE_SCRAPER=1 uvicorn app.main:app --port 8742
 ```
 
 ## How to run tests
 
 ```bash
-pytest -q
+pytest -q                        # 49 unit + integration (offline, fast)
+pytest tests/e2e -o addopts=""   # 9 Playwright e2e (offline scraper)
 ```
+
+Run both after any change; do not commit red.
 
 ## GitHub
 
-The user wants this pushed to a **private** repo named
-`flight-meetup-finder` via `gh repo create flight-meetup-finder
---private --source=. --push`. As of 2026-06-09 the `gh` CLI is **not
-installed** on this machine — flag this to the user before attempting
-the push; the local commits should still be made.
+Private repo: <https://github.com/lvolcov/flight-meetup-finder>
+(`origin`, branch `master`). `gh` is authenticated on both the dev
+machine and the home server. Commit + push when work is done.

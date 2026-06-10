@@ -65,11 +65,14 @@ Changing filters that operate post-scrape (time-of-day, sync, caps) is
 ## 3. Database schema (SQLite)
 
 ```sql
--- Editable destination list (F-1)
+-- Editable destination list (F-1). schengen=0 marks airports with passport
+-- control when flying from Lisbon (classified from seed_data.NON_SCHENGEN_IATA;
+-- it is Schengen membership, not EU membership, that matters).
 CREATE TABLE destinations (
     iata        TEXT PRIMARY KEY,    -- 'BCN'
     name        TEXT NOT NULL,       -- 'Barcelona'
     enabled     INTEGER NOT NULL DEFAULT 1,
+    schengen    INTEGER NOT NULL DEFAULT 1,
     added_at    TEXT NOT NULL
 );
 
@@ -125,6 +128,11 @@ CREATE INDEX idx_results_job ON results(job_id);
 CREATE INDEX idx_jobs_status ON jobs(status, updated_at);
 CREATE INDEX idx_cache_fetched ON flight_cache(fetched_at);
 ```
+
+Schema changes are applied additively at boot by `db._migrate()` (e.g. the
+`schengen` column is `ALTER TABLE`-added to databases created before it
+existed, and the non-Schengen classification is re-applied idempotently on
+every start so the known set in `seed_data.py` stays authoritative).
 
 ## 4. The `services/flights.py` wrapper
 
@@ -185,22 +193,87 @@ as specified in F-3.
 
 ## 5. Job runner
 
-- Implemented as an `asyncio.Task` started on app startup.
-- A single in-memory `asyncio.Queue` of pending jobs.
-- Per-job: one Playwright browser context reused across queries inside
-  that job, closed when the job finishes (cuts startup cost).
+- Implemented as an `asyncio.Task` started on app startup
+  (`services/jobs.py`, wired in `main.py`'s lifespan).
+- A single in-memory `asyncio.Queue` of pending job ids.
+- **Restart resume**: the queue is in-memory, so on startup the lifespan
+  re-enqueues every job still marked `pending`/`running` in SQLite. A
+  (re)started job first clears its old `results` rows, then re-evaluates
+  every tuple — already-scraped queries come from the cache, so a resume
+  is cheap and results are never duplicated.
+- Each query is retried once, then marked failed and skipped — one
+  failure never kills the job (F-16).
 - Cancellation: setting `jobs.status = 'cancelled'` is checked between
-  queries; the worker bails out and closes the context.
+  tuples; the worker bails out.
+- Browser-context reuse per job (an earlier idea in this document) is
+  **not implemented**: `fast-flights` 2.2 launches its own browser inside
+  every `get_flights` call and exposes no way to inject a context without
+  reaching into library internals. Each scrape pays browser startup; the
+  cache and throttle make this acceptable for household use.
+- The scrape itself runs via `asyncio.to_thread` because `get_flights`
+  drives Playwright's blocking sync API.
 
-## 6. Frontend
+### Pricing model
 
-- Jinja2 templates rendered by FastAPI for the page shells.
-- One global `app.js` (vanilla) handles form submission, polling and
-  client-side re-sort/re-filter. No bundler.
-- One `theme.css` with CSS custom properties for light/dark palettes.
+Every query is a **one-way** search per `(origin, destination, date)`.
+The matcher (`core/matching.py`) picks the cheapest valid option per leg
+independently, so mixed-airline itineraries (e.g. Ryanair out, easyJet
+back) are found naturally. The trade-off: legacy-carrier round-trip
+bundles that undercut two one-ways are invisible to the tool. Each leg
+carries its own `price_gbp` (EUR converted at the static `EUR_TO_GBP`
+rate) in the result payload, plus a one-way Google Flights deep link.
+
+## 6. HTTP API
+
+```
+POST   /api/estimate                 query-count estimate, no job created
+POST   /api/search                   create job -> {job_id, estimated_queries}
+GET    /api/jobs?limit=N             recent jobs (recent-searches list)
+GET    /api/jobs/{id}                status + counts + partial results
+POST   /api/jobs/{id}/cancel         request cancellation
+GET    /api/destinations[?enabled_only=true]
+POST   /api/destinations             add by IATA (auto Schengen-classified)
+PATCH  /api/destinations/{iata}      {enabled: bool}
+DELETE /api/destinations/{iata}
+GET    /api/saved-searches
+POST   /api/saved-searches           {name, request}
+POST   /api/saved-searches/{id}/run  re-run -> {job_id, estimated_queries}
+DELETE /api/saved-searches/{id}
+GET    /healthz                      container healthcheck
+GET    /  /search/{job_id}  /saved   Jinja page shells
+```
+
+## 7. Frontend
+
+- Jinja2 templates rendered by FastAPI for the page shells; all dynamic
+  behaviour lives in one global `app.js` (vanilla, no bundler): form
+  submission, live estimate, recent-jobs list, results polling with
+  client-side re-sort/re-filter, dark mode, Schengen toggle.
+- Dates: text inputs in **dd/mm/yyyy** plus a calendar button that opens
+  a hidden `<input type="date">` via `showPicker()` and writes the choice
+  back as dd/mm/yyyy. A bare `type="date"` is not acceptable because its
+  display format follows the browser locale, not the page.
+- The recent-searches list and results polling read server state, so a
+  search started on the PC is visible and followable from a phone; jobs
+  also survive app restarts (see §5).
+- One `theme.css` with CSS custom properties for light/dark palettes;
+  dark mode persists in `localStorage` and honours `prefers-color-scheme`.
 - Google Fonts loaded via `<link>` — no build step.
 
-## 7. Failure modes & honesty
+## 8. Test strategy
+
+- `pytest -q` (fast, offline): core logic units, wrapper string parsers,
+  job-runner behaviour with fake/broken services, full ASGI integration
+  via `TestClient` with `FMF_FAKE_SCRAPER=1` (incl. orphan-job resume and
+  the schema migration).
+- `pytest tests/e2e -o addopts=""`: Playwright drives headless Chromium
+  against a real uvicorn process running the deterministic fake scraper —
+  covers form rendering, dark-mode persistence, 380px mobile collapse,
+  result streaming, client-side re-sort, dd/mm/yyyy entry + calendar
+  sync, per-leg prices and the Schengen toggle.
+- No test ever scrapes Google.
+
+## 9. Failure modes & honesty
 
 - **Scraper broken**: the wrapper returns an empty list and logs the
   error; the job marks that query failed and continues. The UI shows

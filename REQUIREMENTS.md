@@ -108,6 +108,38 @@ automates that search and ranks viable trips by combined price.
 - **F-26 Responsive**: filters collapse into an accordion on mobile, tested
   at 380px width. Results render as stacked cards on mobile.
 
+### 3.5 Post-MVP additions (shipped 2026-06-10)
+
+- **F-27 Recent searches**: the home page lists recent jobs with live
+  status/progress, each linking to its results view. Because jobs run
+  server-side, a search started on one device (PC) is findable and
+  followable from another (phone); navigating away or refreshing never
+  loses a search.
+- **F-28 Restart resume**: jobs left `pending`/`running` by an app or
+  container restart are re-enqueued on startup. A resumed job clears its
+  earlier result rows and re-evaluates (cache absorbs re-scrapes), so
+  results are complete and never duplicated.
+- **F-29 British dates**: all date entry/display is dd/mm/yyyy,
+  regardless of browser locale, with a native calendar picker available
+  via a button next to each field.
+- **F-30 Per-leg prices**: each itinerary leg shows its own price in GBP
+  (EUR legs also show the original euro amount) in addition to the
+  combined figure.
+- **F-31 Schengen filter**: destinations are classified by Schengen
+  membership (the criterion is "no passport control when flying from
+  Lisbon" — Talita cannot pass non-Schengen immigration). It is Schengen,
+  not EU: Dublin is excluded; Zurich/Oslo are included; Romania, Bulgaria
+  and Croatia are included. A one-tap "Schengen only" toggle on the
+  search form deselects all passport-control destinations (and restores
+  them when unticked), persisted per browser. Non-Schengen airports carry
+  a "passport" badge in both destination lists, and airports added by
+  IATA code are classified automatically against a known set.
+- **F-32 Leg-level pricing model**: every scrape is an independent
+  one-way query and each leg is optimised individually, so mixed-airline
+  combinations (e.g. Ryanair out, easyJet back) are found. The known
+  trade-off — legacy-carrier round-trip bundles that beat two one-ways
+  are invisible — is accepted and documented.
+
 ## 4. Non-functional requirements
 
 - **N-1 Self-contained**: SQLite file on a Docker volume; no external DB

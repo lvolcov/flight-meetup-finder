@@ -11,9 +11,25 @@ takes hours. This tool automates it.
 
 ## Status
 
-✅ **Functional.** Core engine, `fast-flights` wrapper, SQLite cache, the
-background job runner, the full REST API and a responsive Jinja/vanilla-JS UI
-(light + dark mode) are implemented and tested.
+✅ **Deployed and in use** on the home server. Core engine, `fast-flights`
+wrapper, SQLite cache, background job runner, full REST API and a responsive
+Jinja/vanilla-JS UI (light + dark mode) — implemented and tested
+(49 unit/integration + 9 Playwright e2e tests).
+
+Feature highlights beyond the basics:
+
+- **Searches are never lost** — jobs run server-side, appear in a
+  "Searches" list on the home page with live progress (visible from any
+  device, e.g. start on the PC, follow on the phone), and resume
+  automatically if the container restarts.
+- **British dates** (dd/mm/yyyy) with a native calendar picker.
+- **Per-leg prices in £** alongside the combined figure (EUR legs also
+  show the original € amount).
+- **"Schengen only" toggle** — one tap deselects every destination with
+  passport control when flying from Lisbon (UK, Ireland, Cyprus,
+  Balkans…), since Talita can only travel within Schengen.
+- **Leg-level pricing**: every leg is an independent one-way search, so
+  mixed-airline combinations (Ryanair out, easyJet back) are found.
 
 ## Quick start
 
@@ -37,6 +53,19 @@ pytest tests/e2e -o addopts=""  # Playwright front-end e2e (offline scraper)
 
 See [`REQUIREMENTS.md`](./REQUIREMENTS.md) for the full feature spec and
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design.
+
+## Home-server deployment
+
+The production instance runs from `/opt/flight-meetup-finder` via the
+server's central `/opt/docker-compose.yml`, with a bind mount
+`/opt/flight-meetup-finder/data:/data` (owned by UID 1001) so the SQLite
+database is covered by the existing `/opt` backups. To update:
+
+```bash
+cd /opt/flight-meetup-finder && git pull && cd /opt
+docker compose up -d --build flight-meetup-finder   # --build is required
+curl -fsS http://localhost:8742/healthz             # {"status":"ok"}
+```
 
 ## Configuration
 
