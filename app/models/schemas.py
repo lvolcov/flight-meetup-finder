@@ -122,11 +122,38 @@ class SearchRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 # Responses
 # --------------------------------------------------------------------------- #
+class Estimate(BaseModel):
+    """Query-count and duration estimate for a (would-be) search."""
+
+    estimated_queries: int
+    # Queries not already in a fresh cache — the ones that actually cost time.
+    uncached_queries: int
+    estimated_seconds: int
+
+
 class JobCreated(BaseModel):
     """Response to ``POST /api/search``."""
 
     job_id: str
     estimated_queries: int
+    uncached_queries: int = 0
+    estimated_seconds: int = 0
+
+
+class RerunCheck(BaseModel):
+    """Pre-flight info for re-running an old search."""
+
+    dates_in_past: bool
+    outbound_end: str
+    estimated_queries: int
+    uncached_queries: int
+    estimated_seconds: int
+
+
+class SaveFromJob(BaseModel):
+    """Payload to save a finished job's filters as a named search."""
+
+    name: str
 
 
 class JobSummary(BaseModel):
@@ -150,6 +177,7 @@ class JobStatus(BaseModel):
     queries_total: int
     queries_done: int
     queries_failed: int
+    created_at: str = ""
     error: str | None = None
     results: list[dict] = Field(default_factory=list)
     hidden_city: list[dict] = Field(default_factory=list)

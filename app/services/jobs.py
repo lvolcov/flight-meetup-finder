@@ -126,6 +126,35 @@ async def estimate_queries(
     return len(tasks)
 
 
+async def estimate_search(
+    db_path: Path, request: SearchRequest, a_origin: str, settings: Settings
+) -> dict:
+    """Estimate a search's query count and wall-clock duration.
+
+    Cached-and-fresh queries cost ~nothing, so only the uncached remainder
+    is multiplied by the per-query cost (scrape + throttle delay). The
+    result therefore shrinks dramatically when re-running a recent search.
+
+    Returns:
+        ``{"estimated_queries", "uncached_queries", "estimated_seconds"}``.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    destinations = await resolve_destinations(db_path, request)
+    tasks, _ = expand_tasks(request, a_origin, destinations)
+    cutoff = (
+        datetime.now(UTC) - timedelta(hours=settings.cache_ttl_hours)
+    ).isoformat()
+    fresh = await db.list_fresh_cache_keys(db_path, cutoff)
+    uncached = sum(1 for t in tasks if t not in fresh)
+    per_query = settings.scrape_delay_seconds + settings.scrape_cost_seconds
+    return {
+        "estimated_queries": len(tasks),
+        "uncached_queries": uncached,
+        "estimated_seconds": int(uncached * per_query),
+    }
+
+
 class JobRunner:
     """Owns the in-process job queue and its single worker task."""
 

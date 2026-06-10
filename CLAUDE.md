@@ -84,7 +84,7 @@ app/
     deps.py                 # typed accessors for app.state singletons
     routes_jobs.py          # POST /api/estimate, POST /api/search,
                             #   GET /api/jobs, GET /api/jobs/{id},
-                            #   POST /api/jobs/{id}/cancel
+                            #   cancel / rerun-check / rerun / save / DELETE
     routes_destinations.py  # GET/POST/PATCH/DELETE /api/destinations
     routes_saved.py         # GET/POST/DELETE /api/saved-searches, + /run
     routes_pages.py         # GET /, /search/{job_id}, /saved (Jinja shells)
@@ -109,7 +109,7 @@ tests/
 Dockerfile  docker-compose.yml  .dockerignore  pytest.ini
 ```
 
-**Test counts as of 2026-06-10: 49 unit/integration + 9 e2e, all passing.**
+**Test counts as of 2026-06-10: 53 unit/integration + 12 e2e, all passing.**
 The default `pytest -q` ignores `tests/e2e` (needs a browser); run those
 with `pytest tests/e2e -o addopts=""`.
 
@@ -135,8 +135,23 @@ with `pytest tests/e2e -o addopts=""`.
   only" toggle on the search form deselects the passport-control
   destinations in one tap, persisted in localStorage. The DB migrates
   automatically on boot (`db._migrate`, idempotent re-classification).
-- **`POST /api/estimate`**: live query-count estimate while editing the
-  form, without creating a job.
+- **Search management (F-33)**: rerun (with `GET /api/jobs/{id}/rerun-check`
+  pre-flight — blocks past dates with 409, confirms query count + ETA),
+  delete (`DELETE /api/jobs/{id}`, stops a running job cleanly — the
+  runner treats a missing job row as cancellation) and save-as-named-
+  search (`POST /api/jobs/{id}/save`) from the list and results pages.
+- **Time estimates everywhere (F-34)**: `estimate_search` in
+  `services/jobs.py` is cache-aware (fresh-cached queries cost nothing);
+  uncached × (`SCRAPE_DELAY_SECONDS` + `SCRAPE_COST_SECONDS`, default 6 s).
+  Returned by `/api/estimate`, `/api/search`, rerun-check; shown on the
+  form, in every run confirmation, and as "time left" for running jobs
+  (client-side rate from `created_at` + `queries_done`).
+- **Form explanations (F-35)**: hint paragraphs + title tooltips on every
+  filter, written for a non-technical user (Talita).
+- **`POST /api/estimate`**: live query-count + duration estimate while
+  editing the form, without creating a job.
+- **SVG favicon** (`static/favicon.svg`, plane on terracotta) and a
+  sliding sun/moon theme-toggle pill in the header.
 - **`FMF_FAKE_SCRAPER=1`**: swaps in `DeterministicFlightsService`
   (per-destination price variation so re-sort is observable). Used by
   all e2e tests and the API integration tests.

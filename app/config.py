@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:////data/fmf.db"
     fetch_mode: str = "local"
     scrape_delay_seconds: float = 1.5
+    # Rough wall-clock cost of one uncached scrape (Playwright launch +
+    # Google Flights load). Used only for user-facing time estimates.
+    scrape_cost_seconds: float = 6.0
     cache_ttl_hours: int = 12
     eur_to_gbp: float = 0.85
 

@@ -54,6 +54,17 @@ function fmtDate(iso) {
 }
 function stopsLabel(n) { return n === 0 ? 'direct' : `${n} stop${n > 1 ? 's' : ''}`; }
 
+/* Human-friendly duration estimate: "under a minute", "about 4 min",
+   "about 1 hr 20 min". Used for every search-time estimate in the app. */
+function fmtETA(seconds) {
+  if (seconds < 60) return 'under a minute';
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `about ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem ? `about ${hrs} hr ${rem} min` : `about ${hrs} hr`;
+}
+
 /* Dates are entered as dd/mm/yyyy (British) and sent to the API as ISO. */
 function ukToISO(value) {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
@@ -222,6 +233,45 @@ function initDateFields() {
   });
 }
 
+/* Rerun an old search: first check the dates haven't passed and tell the
+   user how many queries it will run and roughly how long it will take. */
+async function rerunWithCheck(jobId) {
+  let info;
+  try {
+    info = await getJSON(`/api/jobs/${jobId}/rerun-check`);
+  } catch (e) {
+    alert('Could not check this search: ' + e.message);
+    return;
+  }
+  if (info.dates_in_past) {
+    alert(`The dates of this search have already passed ` +
+      `(last outbound day was ${isoToUK(info.outbound_end)}). ` +
+      `Start a new search with fresh dates.`);
+    return;
+  }
+  const cached = info.estimated_queries - info.uncached_queries;
+  let msg = `Run this search again?\n\n` +
+    `${info.estimated_queries} queries, ${fmtETA(info.estimated_seconds)}.`;
+  if (cached > 0) msg += `\n(${cached} are already cached, so it's quicker.)`;
+  if (!confirm(msg)) return;
+  try {
+    const { job_id } = await sendJSON(`/api/jobs/${jobId}/rerun`, 'POST');
+    window.location.href = `/search/${job_id}`;
+  } catch (e) {
+    alert('Could not re-run: ' + e.message);
+  }
+}
+
+/* Estimate of time remaining for a live job from its own progress rate. */
+function jobRemainingSeconds(job) {
+  if (!job.created_at || !job.queries_done || !job.queries_total) return null;
+  const elapsed = (Date.now() - new Date(job.created_at).getTime()) / 1000;
+  if (elapsed <= 0) return null;
+  const rate = job.queries_done / elapsed;  // queries per second
+  if (rate <= 0) return null;
+  return Math.round((job.queries_total - job.queries_done) / rate);
+}
+
 /* Recent searches (server-side jobs) — visible from any device, and they
    keep running even if the page that launched them is closed. */
 const JOB_STATUS_ICON = {
@@ -237,9 +287,13 @@ async function loadRecentJobs() {
     const pct = j.queries_total
       ? Math.round((j.queries_done / j.queries_total) * 100) : 0;
     const live = j.status === 'running' || j.status === 'pending';
-    const detail = live
+    let detail = live
       ? `${j.queries_done}/${j.queries_total} queries`
       : fmtDateTime(j.created_at);
+    if (j.status === 'running') {
+      const left = jobRemainingSeconds(j);
+      if (left != null) detail += ` · ${fmtETA(left)} left`;
+    }
     return `<div class="job-row" data-status="${j.status}">` +
       `<a class="job-link" href="/search/${j.id}" title="Open this search's results">` +
       `<span class="job-icon">${JOB_STATUS_ICON[j.status] || '?'}</span>` +
@@ -254,15 +308,8 @@ async function loadRecentJobs() {
       `</span></div>`;
   }).join('');
 
-  $$('[data-rerun]', box).forEach((b) => b.addEventListener('click', async () => {
-    b.disabled = true;
-    try {
-      const { job_id } = await sendJSON(`/api/jobs/${b.dataset.rerun}/rerun`, 'POST');
-      window.location.href = `/search/${job_id}`;
-    } catch (e) {
-      b.disabled = false;
-      alert('Could not re-run: ' + e.message);
-    }
+  $$('[data-rerun]', box).forEach((b) => b.addEventListener('click', () => {
+    rerunWithCheck(b.dataset.rerun);
   }));
   $$('[data-delete]', box).forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('Delete this search and its results?')) return;
@@ -284,10 +331,14 @@ async function refreshEstimate() {
   const out = $('#estimate');
   if (!out) return;
   try {
-    const { estimated_queries: n } = await sendJSON(
-      '/api/estimate', 'POST', gatherRequest());
-    out.textContent = `≈ ${n} scrape ${n === 1 ? 'query' : 'queries'}`;
-    $('#estimate-warn').hidden = n <= 200;
+    const est = await sendJSON('/api/estimate', 'POST', gatherRequest());
+    const n = est.estimated_queries;
+    const cached = n - est.uncached_queries;
+    let text = `≈ ${n} scrape ${n === 1 ? 'query' : 'queries'}` +
+      ` · ${fmtETA(est.estimated_seconds)}`;
+    if (cached > 0) text += ` (${cached} already cached)`;
+    out.textContent = text;
+    $('#estimate-warn').hidden = est.uncached_queries <= 200;
   } catch (e) {
     out.textContent = 'Fill in the dates to estimate.';
   }
@@ -449,6 +500,17 @@ function initResults() {
   $('#cancel-job').addEventListener('click', async () => {
     try { await sendJSON(`/api/jobs/${jobId}/cancel`, 'POST'); } catch (e) { /* noop */ }
   });
+  $('#rerun-job').addEventListener('click', () => rerunWithCheck(jobId));
+  $('#save-job').addEventListener('click', async () => {
+    const name = prompt('Name this search:');
+    if (!name) return;
+    try {
+      await sendJSON(`/api/jobs/${jobId}/save`, 'POST', { name });
+      alert(`Saved — find it under “Saved”.`);
+    } catch (e) {
+      alert('Could not save: ' + e.message);
+    }
+  });
 
   let active = true;
   async function poll() {
@@ -462,8 +524,13 @@ function initResults() {
     $('#progress-fill').style.width = `${pct}%`;
     const failed = job.queries_failed
       ? ` · ${job.queries_failed} failed` : '';
+    let eta = '';
+    if (job.status === 'running') {
+      const left = jobRemainingSeconds(job);
+      if (left != null) eta = ` · ${fmtETA(left)} left`;
+    }
     $('#status-text').textContent =
-      `${job.status} — ${job.queries_done}/${job.queries_total} queries${failed}`;
+      `${job.status} — ${job.queries_done}/${job.queries_total} queries${failed}${eta}`;
 
     ResultsView.data = job.results;
     ResultsView.render();
@@ -497,7 +564,26 @@ async function loadSaved() {
       `<button class="btn ghost small" data-del="${s.id}">Delete</button></div></article>`;
   }).join('');
 
+  const byId = {};
+  rows.forEach((s) => { byId[s.id] = s; });
   $$('[data-run]', box).forEach((b) => b.addEventListener('click', async () => {
+    const saved = byId[b.dataset.run];
+    const filters = saved ? saved.filters_json : null;
+    if (filters && filters.outbound_end) {
+      const today = new Date().toISOString().slice(0, 10);
+      if (filters.outbound_end < today) {
+        alert(`The dates of this search have already passed (last outbound ` +
+          `day was ${isoToUK(filters.outbound_end)}). Edit it on the search ` +
+          `page with fresh dates.`);
+        return;
+      }
+      try {
+        const est = await sendJSON('/api/estimate', 'POST', filters);
+        const msg = `Run “${saved.name}”?\n\n${est.estimated_queries} ` +
+          `queries, ${fmtETA(est.estimated_seconds)}.`;
+        if (!confirm(msg)) return;
+      } catch (e) { /* estimate is best-effort; still allow the run */ }
+    }
     const { job_id } = await sendJSON(`/api/saved-searches/${b.dataset.run}/run`, 'POST');
     window.location.href = `/search/${job_id}`;
   }));

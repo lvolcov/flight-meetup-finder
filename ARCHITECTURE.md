@@ -213,6 +213,18 @@ as specified in F-3.
 - The scrape itself runs via `asyncio.to_thread` because `get_flights`
   drives Playwright's blocking sync API.
 
+### Time estimation
+
+All duration estimates share one model (`jobs.estimate_search`): expand
+the request into its distinct scrape tasks, subtract the ones already in
+a fresh cache (they cost ~nothing), and multiply the uncached remainder
+by `SCRAPE_DELAY_SECONDS + SCRAPE_COST_SECONDS` (the latter is a rough
+per-scrape wall-clock cost, configurable, default 6 s). The estimate is
+shown on the search form, in the search/rerun confirmations and in saved
+searches. For *running* jobs, the UI instead derives "time left" from the
+job's own observed rate (`queries_done` over elapsed time since
+`created_at`), shown on the results page and in the recent-searches list.
+
 ### Pricing model
 
 Every query is a **one-way** search per `(origin, destination, date)`.
@@ -226,11 +238,16 @@ rate) in the result payload, plus a one-way Google Flights deep link.
 ## 6. HTTP API
 
 ```
-POST   /api/estimate                 query-count estimate, no job created
-POST   /api/search                   create job -> {job_id, estimated_queries}
+POST   /api/estimate                 {estimated_queries, uncached_queries,
+                                      estimated_seconds} — no job created
+POST   /api/search                   create job -> {job_id, + estimate fields}
 GET    /api/jobs?limit=N             recent jobs (recent-searches list)
 GET    /api/jobs/{id}                status + counts + partial results
 POST   /api/jobs/{id}/cancel         request cancellation
+GET    /api/jobs/{id}/rerun-check    pre-flight: dates_in_past + fresh estimate
+POST   /api/jobs/{id}/rerun          new job, same filters (409 if dates past)
+POST   /api/jobs/{id}/save           save the job's filters as a saved search
+DELETE /api/jobs/{id}                delete job + results (stops if running)
 GET    /api/destinations[?enabled_only=true]
 POST   /api/destinations             add by IATA (auto Schengen-classified)
 PATCH  /api/destinations/{iata}      {enabled: bool}

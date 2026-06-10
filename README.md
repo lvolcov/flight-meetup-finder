@@ -14,7 +14,7 @@ takes hours. This tool automates it.
 ✅ **Deployed and in use** on the home server. Core engine, `fast-flights`
 wrapper, SQLite cache, background job runner, full REST API and a responsive
 Jinja/vanilla-JS UI (light + dark mode) — implemented and tested
-(49 unit/integration + 9 Playwright e2e tests).
+(53 unit/integration + 12 Playwright e2e tests).
 
 Feature highlights beyond the basics:
 
@@ -30,6 +30,13 @@ Feature highlights beyond the basics:
   Balkans…), since Talita can only travel within Schengen.
 - **Leg-level pricing**: every leg is an independent one-way search, so
   mixed-airline combinations (Ryanair out, easyJet back) are found.
+- **Rerun, save and delete past searches** from the list or a results
+  page — a rerun checks the dates haven't passed and confirms the query
+  count and expected duration first.
+- **Time estimates everywhere**: how long a search will take (cache-aware)
+  before you launch it, and how long is left while it runs.
+- **Self-explanatory form**: plain-language hints and tooltips on every
+  option, so both travellers can use it unaided.
 
 ## Quick start
 

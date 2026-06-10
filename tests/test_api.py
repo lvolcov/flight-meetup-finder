@@ -135,6 +135,73 @@ def test_cancel_unknown_job_404(client: TestClient) -> None:
     assert client.delete("/api/jobs/nope").status_code == 404
 
 
+def test_estimate_includes_duration_and_cache_awareness(
+    client: TestClient,
+) -> None:
+    # Cold cache: every query is uncached and costs time.
+    est = client.post("/api/estimate", json=_meetup_body()).json()
+    assert est["estimated_queries"] == 4
+    assert est["uncached_queries"] == 4
+    assert est["estimated_seconds"] > 0
+
+    # After running the search the cache is warm, so the same estimate
+    # collapses to ~zero seconds.
+    created = client.post("/api/search", json=_meetup_body()).json()
+    assert created["estimated_seconds"] > 0
+    _poll(client, created["job_id"])
+    est = client.post("/api/estimate", json=_meetup_body()).json()
+    assert est["uncached_queries"] == 0
+    assert est["estimated_seconds"] == 0
+
+
+def test_rerun_check_and_past_dates_blocked(client: TestClient) -> None:
+    # A job with valid (future) dates passes the check.
+    created = client.post("/api/search", json=_meetup_body()).json()
+    _poll(client, created["job_id"])
+    check = client.get(f"/api/jobs/{created['job_id']}/rerun-check").json()
+    assert check["dates_in_past"] is False
+    assert check["estimated_queries"] == 4
+    assert "estimated_seconds" in check
+
+    # A job whose dates have passed is flagged and refused.
+    old = dict(_meetup_body())
+    old.update(
+        outbound_start="2020-07-10", outbound_end="2020-07-10",
+        return_start="2020-07-13", return_end="2020-07-13",
+    )
+    stale = client.post("/api/search", json=old).json()
+    _poll(client, stale["job_id"])
+    check = client.get(f"/api/jobs/{stale['job_id']}/rerun-check").json()
+    assert check["dates_in_past"] is True
+    resp = client.post(f"/api/jobs/{stale['job_id']}/rerun")
+    assert resp.status_code == 409
+    assert "passed" in resp.json()["detail"]
+
+
+def test_save_job_as_saved_search(client: TestClient) -> None:
+    created = client.post("/api/search", json=_meetup_body()).json()
+    _poll(client, created["job_id"])
+
+    saved = client.post(
+        f"/api/jobs/{created['job_id']}/save", json={"name": "From results"}
+    )
+    assert saved.status_code == 201
+    assert saved.json()["name"] == "From results"
+    assert saved.json()["mode"] == "meetup"
+
+    # Same name twice -> conflict, not a crash.
+    dup = client.post(
+        f"/api/jobs/{created['job_id']}/save", json={"name": "From results"}
+    )
+    assert dup.status_code == 409
+
+    listed = client.get("/api/saved-searches").json()
+    assert any(s["name"] == "From results" for s in listed)
+    # And it runs like any saved search.
+    run = client.post(f"/api/saved-searches/{saved.json()['id']}/run").json()
+    assert _poll(client, run["job_id"])["status"] == "done"
+
+
 def test_rerun_and_delete_job(client: TestClient) -> None:
     created = client.post("/api/search", json=_meetup_body()).json()
     _poll(client, created["job_id"])

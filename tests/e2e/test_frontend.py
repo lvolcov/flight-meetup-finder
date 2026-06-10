@@ -213,10 +213,20 @@ def test_rerun_and_delete_from_searches_list(
     page.wait_for_selector("#recent-jobs .job-row")
     initial = page.locator("#recent-jobs .job-row").count()
 
-    # Rerun launches a fresh job with the same filters and opens it.
+    # Rerun first shows a confirmation with the query count and a time
+    # estimate, then launches a fresh job and opens it.
     original_url = page.url
+    dialogs: list[str] = []
+
+    def _accept(dialog) -> None:
+        dialogs.append(dialog.message)
+        dialog.accept()
+
+    page.once("dialog", _accept)
     page.locator("#recent-jobs [data-rerun]").first.click()
     page.wait_for_url("**/search/**")
+    assert dialogs and "queries" in dialogs[0]
+    assert "minute" in dialogs[0] or "min" in dialogs[0] or "cached" in dialogs[0]
     assert page.url != original_url
     expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
 
@@ -229,6 +239,36 @@ def test_rerun_and_delete_from_searches_list(
     page.locator("#recent-jobs [data-delete]").first.click()
     expect(page.locator("#recent-jobs .job-row")).to_have_count(
         initial, timeout=5000
+    )
+
+
+def test_estimate_shows_duration(page: Page, base_url: str) -> None:
+    page.goto(base_url + "/")
+    page.wait_for_selector("#dest-list input[type=checkbox]")
+    # The live estimate includes a human-friendly time alongside the count.
+    expect(page.locator("#estimate")).to_contain_text("quer", timeout=5000)
+    text = page.locator("#estimate").inner_text()
+    assert "minute" in text or "min" in text or "hr" in text
+
+
+def test_save_search_from_results_page(page: Page, base_url: str) -> None:
+    _start_narrow_search(page, base_url)
+    expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
+
+    # "Save search" prompts for a name, then confirms with an alert.
+    def _handle(dialog) -> None:
+        if dialog.type == "prompt":
+            dialog.accept("E2E saved from results")
+        else:
+            dialog.accept()
+
+    page.on("dialog", _handle)
+    page.click("#save-job")
+
+    page.goto(base_url + "/saved")
+    page.wait_for_selector("#saved-list .result")
+    expect(page.locator("#saved-list")).to_contain_text(
+        "E2E saved from results"
     )
 
 

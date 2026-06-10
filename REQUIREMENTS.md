@@ -139,6 +139,20 @@ automates that search and ranks viable trips by combined price.
   combinations (e.g. Ryanair out, easyJet back) are found. The known
   trade-off — legacy-carrier round-trip bundles that beat two one-ways
   are invisible — is accepted and documented.
+- **F-33 Search management**: any past search can be re-run or deleted
+  from the recent-searches list or its results page. A rerun first
+  verifies the dates have not passed (blocked with an explanation if they
+  have) and shows the query count and time estimate for confirmation.
+  Deleting a running search stops it cleanly. A job's filters can be
+  saved as a named saved search directly from its results page.
+- **F-34 Time estimates everywhere**: the form's live estimate, search
+  launch, rerun and saved-search confirmations all show an expected
+  duration (cache-aware: already-cached queries cost nothing); running
+  searches show time remaining, derived from their observed progress
+  rate, on both the results page and the recent-searches list.
+- **F-35 Self-explanatory form**: every filter group carries a
+  plain-language explanation and every field a tooltip, written so a
+  non-technical user (Talita) can understand the options unaided.
 
 ## 4. Non-functional requirements
 

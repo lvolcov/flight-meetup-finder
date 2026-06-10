@@ -226,6 +226,25 @@ async def get_cache(
     return dict(row) if row else None
 
 
+async def list_fresh_cache_keys(
+    db_path: Path, cutoff_iso: str
+) -> set[tuple[str, str, str]]:
+    """Return ``(origin, destination, date)`` keys cached after ``cutoff_iso``.
+
+    Used by the time estimator: cached queries cost ~nothing, so only the
+    uncached remainder counts towards the runtime estimate.
+    """
+    async with aiosqlite.connect(db_path) as conn:
+        rows = await (
+            await conn.execute(
+                "SELECT origin, destination, flight_date FROM flight_cache "
+                "WHERE fetched_at > ?",
+                (cutoff_iso,),
+            )
+        ).fetchall()
+    return {(r[0], r[1], r[2]) for r in rows}
+
+
 async def put_cache(
     db_path: Path,
     origin: str,
