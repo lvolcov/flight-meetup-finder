@@ -325,6 +325,19 @@ async def set_job_status(
         await conn.commit()
 
 
+async def delete_job(db_path: Path, job_id: str) -> bool:
+    """Delete a job and its results. Returns False if it did not exist.
+
+    Results are removed explicitly because foreign-key cascade is only
+    enforced on connections that enable the pragma.
+    """
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute("DELETE FROM results WHERE job_id = ?", (job_id,))
+        cur = await conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        await conn.commit()
+        return cur.rowcount > 0
+
+
 async def update_job_progress(
     db_path: Path, job_id: str, queries_done: int, queries_failed: int
 ) -> None:

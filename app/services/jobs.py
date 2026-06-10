@@ -191,15 +191,19 @@ class JobRunner:
         counters = {"done": 0, "failed": 0}
 
         for ctx in tuples:
-            if await db.get_job_status(self._db_path, job_id) == "cancelled":
-                logger.info("job %s cancelled", job_id)
+            # A deleted job (status None) is treated like a cancellation so
+            # deleting a running search stops it cleanly mid-flight.
+            status = await db.get_job_status(self._db_path, job_id)
+            if status is None or status == "cancelled":
+                logger.info("job %s cancelled or deleted", job_id)
                 return
             await self._evaluate_tuple(job_id, request, ctx, resolved, counters)
 
         if request.mode == "visit" and request.hidden_city:
             await self._add_hidden_city(job_id, request, a_origin)
 
-        if await db.get_job_status(self._db_path, job_id) != "cancelled":
+        status = await db.get_job_status(self._db_path, job_id)
+        if status is not None and status != "cancelled":
             await db.set_job_status(self._db_path, job_id, "done")
 
     async def _resolve(

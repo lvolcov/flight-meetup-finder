@@ -240,12 +240,40 @@ async function loadRecentJobs() {
     const detail = live
       ? `${j.queries_done}/${j.queries_total} queries`
       : fmtDateTime(j.created_at);
-    return `<a class="job-row" href="/search/${j.id}" data-status="${j.status}">` +
+    return `<div class="job-row" data-status="${j.status}">` +
+      `<a class="job-link" href="/search/${j.id}" title="Open this search's results">` +
       `<span class="job-icon">${JOB_STATUS_ICON[j.status] || '?'}</span>` +
       `<span class="job-meta"><strong>${j.mode}</strong> · ${j.status} · ${detail}</span>` +
       `<span class="progress mini"><span class="progress-fill" style="width:${pct}%"></span></span>` +
-      `</a>`;
+      `</a>` +
+      `<span class="job-actions">` +
+      `<button type="button" class="icon-btn small" data-rerun="${j.id}" ` +
+      `title="Search again with the same filters" aria-label="Run again">↻</button>` +
+      `<button type="button" class="icon-btn small" data-delete="${j.id}" ` +
+      `title="Delete this search and its results" aria-label="Delete">🗑</button>` +
+      `</span></div>`;
   }).join('');
+
+  $$('[data-rerun]', box).forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      const { job_id } = await sendJSON(`/api/jobs/${b.dataset.rerun}/rerun`, 'POST');
+      window.location.href = `/search/${job_id}`;
+    } catch (e) {
+      b.disabled = false;
+      alert('Could not re-run: ' + e.message);
+    }
+  }));
+  $$('[data-delete]', box).forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Delete this search and its results?')) return;
+    try {
+      await sendJSON(`/api/jobs/${b.dataset.delete}`, 'DELETE');
+      loadRecentJobs();
+    } catch (e) {
+      alert('Could not delete: ' + e.message);
+    }
+  }));
+
   if (jobs.some((j) => j.status === 'running' || j.status === 'pending')) {
     setTimeout(loadRecentJobs, 2000);
   }

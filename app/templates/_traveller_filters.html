@@ -1,5 +1,13 @@
 {# Per-traveller leg filters (F-7..F-9). Reused for A and B. #}
-<label>Outbound time
+<p class="hint">
+  Limits for this traveller's flights, in local time at each airport.
+  <strong>Morning</strong> = departs after 06:00 and lands before 12:00;
+  <strong>afternoon</strong> = 12:00–18:00; <strong>evening</strong> =
+  18:00–midnight. <strong>Max journey</strong> is the whole flight
+  door-to-door, including any connection. Leave on "Any" / empty for no limit.
+</p>
+<label title="When the flight there may depart and land (local time)">
+  Outbound time
   <select data-leg="outbound">
     <option value="any">Any</option>
     <option value="morning">Morning (06–12)</option>
@@ -7,7 +15,8 @@
     <option value="evening">Evening (18–24)</option>
   </select>
 </label>
-<label>Return time
+<label title="When the flight home may depart and land (local time)">
+  Return time
   <select data-leg="return">
     <option value="any">Any</option>
     <option value="morning">Morning (06–12)</option>
@@ -15,11 +24,13 @@
     <option value="evening">Evening (18–24)</option>
   </select>
 </label>
-<label>Max journey (hours)
+<label title="Longest total travel time you'd accept per flight, including connections — e.g. 5 means no journeys over 5 hours">
+  Max journey (hours)
   <input type="number" data-field="max_duration_hours" min="0" step="0.5"
          placeholder="any">
 </label>
-<label>Max stops
+<label title="Direct = no connections; ≤ 1 = at most one change of plane">
+  Max stops
   <select data-field="max_stops">
     <option value="any">Any</option>
     <option value="one">≤ 1</option>

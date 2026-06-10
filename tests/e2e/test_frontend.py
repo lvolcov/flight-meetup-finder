@@ -35,6 +35,19 @@ def test_form_renders(page: Page, base_url: str) -> None:
         "tab is-active"
     )
     page.wait_for_selector("#dest-list input[type=checkbox]")
+    # Plain-language explanations are present for the date options...
+    expect(page.locator("#search-form .hint").first).to_contain_text(
+        "Outbound"
+    )
+    # ...and the fields carry tooltips.
+    assert "Earliest day" in (
+        page.locator('label:has(input[name="outbound_start"])').get_attribute(
+            "title"
+        )
+        or ""
+    )
+    # The browser tab has an icon.
+    assert page.locator('link[rel="icon"]').count() == 1
 
 
 def test_dark_mode_persists(page: Page, base_url: str) -> None:
@@ -170,7 +183,7 @@ def test_running_search_visible_after_navigating_away(
     page.wait_for_selector("#recent-jobs .job-row")
     row = page.locator("#recent-jobs .job-row").first
     expect(row).to_contain_text("meetup")
-    href = row.get_attribute("href")
+    href = row.locator(".job-link").get_attribute("href")
     assert href and job_url.endswith(href)
 
     # A completely separate browser context (e.g. the phone) sees it too —
@@ -181,13 +194,42 @@ def test_running_search_visible_after_navigating_away(
         phone.goto(base_url + "/")
         phone.wait_for_selector("#recent-jobs .job-row")
         assert phone.locator("#recent-jobs .job-row").count() >= 1
-        phone.locator("#recent-jobs .job-row").first.click()
+        phone.locator("#recent-jobs .job-link").first.click()
         phone.wait_for_url("**/search/**")
         expect(phone.locator("#status-text")).to_contain_text(
             "done", timeout=15000
         )
     finally:
         other.close()
+
+
+def test_rerun_and_delete_from_searches_list(
+    page: Page, base_url: str
+) -> None:
+    _start_narrow_search(page, base_url)
+    expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
+
+    page.goto(base_url + "/")
+    page.wait_for_selector("#recent-jobs .job-row")
+    initial = page.locator("#recent-jobs .job-row").count()
+
+    # Rerun launches a fresh job with the same filters and opens it.
+    original_url = page.url
+    page.locator("#recent-jobs [data-rerun]").first.click()
+    page.wait_for_url("**/search/**")
+    assert page.url != original_url
+    expect(page.locator("#status-text")).to_contain_text("done", timeout=15000)
+
+    page.goto(base_url + "/")
+    page.wait_for_selector("#recent-jobs .job-row")
+    expect(page.locator("#recent-jobs .job-row")).to_have_count(initial + 1)
+
+    # Delete (accepting the confirmation) removes the search from the list.
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#recent-jobs [data-delete]").first.click()
+    expect(page.locator("#recent-jobs .job-row")).to_have_count(
+        initial, timeout=5000
+    )
 
 
 def test_client_side_resort(page: Page, base_url: str) -> None:

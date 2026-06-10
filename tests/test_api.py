@@ -131,6 +131,29 @@ def test_list_jobs_shows_recent_searches(client: TestClient) -> None:
 def test_cancel_unknown_job_404(client: TestClient) -> None:
     assert client.post("/api/jobs/nope/cancel").status_code == 404
     assert client.get("/api/jobs/nope").status_code == 404
+    assert client.post("/api/jobs/nope/rerun").status_code == 404
+    assert client.delete("/api/jobs/nope").status_code == 404
+
+
+def test_rerun_and_delete_job(client: TestClient) -> None:
+    created = client.post("/api/search", json=_meetup_body()).json()
+    _poll(client, created["job_id"])
+
+    # Rerun creates a brand-new job with the same filters.
+    rerun = client.post(f"/api/jobs/{created['job_id']}/rerun").json()
+    assert rerun["job_id"] != created["job_id"]
+    assert rerun["estimated_queries"] == created["estimated_queries"]
+    body = _poll(client, rerun["job_id"])
+    assert body["status"] == "done"
+    assert len(body["results"]) == 1
+
+    # Delete removes the job and its results.
+    assert client.delete(f"/api/jobs/{created['job_id']}").status_code == 204
+    assert client.get(f"/api/jobs/{created['job_id']}").status_code == 404
+    assert client.delete(f"/api/jobs/{created['job_id']}").status_code == 404
+    remaining = {j["id"] for j in client.get("/api/jobs").json()}
+    assert created["job_id"] not in remaining
+    assert rerun["job_id"] in remaining
 
 
 def test_orphaned_job_resumes_on_startup(

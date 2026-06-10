@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.api.deps import get_db_path, get_runner, get_settings
 from app.config import Settings
@@ -102,3 +102,29 @@ async def cancel_job(
     if job["status"] in {"pending", "running"}:
         await db.set_job_status(db_path, job_id, "cancelled")
     return await get_job(job_id, db_path)
+
+
+@router.post("/jobs/{job_id}/rerun", response_model=JobCreated)
+async def rerun_job(
+    job_id: str,
+    db_path: Path = Depends(get_db_path),
+    settings: Settings = Depends(get_settings),
+    runner: JobRunner = Depends(get_runner),
+) -> JobCreated:
+    """Run a fresh search with the same filters as an earlier job."""
+    job = await db.get_job(db_path, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    request = SearchRequest.model_validate_json(job["filters_json"])
+    return await create_and_enqueue(request, db_path, settings, runner)
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+async def delete_job(
+    job_id: str, db_path: Path = Depends(get_db_path)
+) -> Response:
+    """Delete a job and its results (a running job stops itself cleanly)."""
+    ok = await db.delete_job(db_path, job_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="job not found")
+    return Response(status_code=204)

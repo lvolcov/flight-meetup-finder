@@ -40,9 +40,18 @@
   <details class="accordion" open>
     <summary>Dates &amp; trip length</summary>
     <div class="accordion-body grid-2">
-      <label>Outbound from
+      <p class="hint">
+        <strong>Outbound</strong> is the flight there; <strong>return</strong>
+        is the flight home. Each pair of dates is the earliest and latest day
+        that flight could be — the search tries every combination in between.
+        Use the weekday boxes to limit which days are allowed (for example,
+        tick only Fri and Sat if you can only leave at the weekend); leaving
+        them all unticked means any day is fine.
+        <strong>Nights</strong> is how long the trip lasts.
+      </p>
+      <label title="Earliest day the flight there could be">Outbound from
         {{ datefield('outbound_start') }}</label>
-      <label>Outbound to
+      <label title="Latest day the flight there could be">Outbound to
         {{ datefield('outbound_end') }}</label>
       <fieldset class="weekdays" data-weekdays="outbound">
         <legend>Outbound weekdays</legend>
@@ -50,9 +59,9 @@
         <label class="chk"><input type="checkbox" value="{{ loop.index0 }}">{{ wd }}</label>
         {% endfor %}
       </fieldset>
-      <label>Return from
+      <label title="Earliest day the flight home could be">Return from
         {{ datefield('return_start') }}</label>
-      <label>Return to
+      <label title="Latest day the flight home could be">Return to
         {{ datefield('return_end') }}</label>
       <fieldset class="weekdays" data-weekdays="return">
         <legend>Return weekdays</legend>
@@ -60,9 +69,10 @@
         <label class="chk"><input type="checkbox" value="{{ loop.index0 }}">{{ wd }}</label>
         {% endfor %}
       </fieldset>
-      <label>Min nights
+      <label title="Shortest trip you would accept — e.g. 2 means at least two nights away">
+        Min nights
         <input type="number" name="min_nights" min="1" value="2" required></label>
-      <label>Max nights
+      <label title="Longest trip you would accept">Max nights
         <input type="number" name="max_nights" min="1" value="5" required></label>
     </div>
   </details>
@@ -124,16 +134,31 @@
   <details class="accordion">
     <summary>Sync &amp; price caps</summary>
     <div class="accordion-body grid-2">
-      <label data-mode-only="meetup">Max arrival gap (hours)
+      <p class="hint" data-mode-only="meetup">
+        These keep the two of you together. <strong>Arrival gap</strong> is the
+        longest one of you would wait at the destination airport for the other
+        to land. <strong>Departure gap</strong> is the same for flying home.
+        <strong>Combined price</strong> is all four flights added together, in
+        pounds. Leave a box empty to ignore that limit.
+      </p>
+      <label data-mode-only="meetup"
+             title="Longest acceptable wait between your two landings — e.g. 3 means you land within 3 hours of each other">
+        Max arrival gap (hours)
         <input type="number" name="max_arrival_gap_hours" min="0" step="0.5"
                placeholder="any"></label>
-      <label data-mode-only="meetup">Max departure gap (hours)
+      <label data-mode-only="meetup"
+             title="Longest acceptable gap between your two departure flights home">
+        Max departure gap (hours)
         <input type="number" name="max_departure_gap_hours" min="0" step="0.5"
                placeholder="any"></label>
-      <label data-mode-only="meetup">Max combined price (£)
+      <label data-mode-only="meetup"
+             title="Most you want to spend in total — all four flights together, in pounds">
+        Max combined price (£)
         <input type="number" name="max_combined_gbp" min="0" step="10"
                placeholder="no cap"></label>
-      <label data-mode-only="visit" hidden>Max price (£)
+      <label data-mode-only="visit" hidden
+             title="Most you want to spend on the return trip, in pounds">
+        Max price (£)
         <input type="number" name="max_price_gbp" min="0" step="10"
                placeholder="no cap"></label>
     </div>

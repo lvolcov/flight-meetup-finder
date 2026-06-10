@@ -142,6 +142,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .chk { flex-direction: row; align-items: center; gap: .35rem; font-weight: 400; }
 .chk input { width: auto; }
 .hint { font-size: .85rem; color: var(--text-soft); }
+.grid-2 > .hint { grid-column: 1 / -1; margin: .25rem 0 0; }
 
 .dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .4rem .8rem; }
 .schengen-toggle { margin: .25rem 0 .75rem; font-weight: 600; }
@@ -165,17 +166,23 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 /* Recent searches ------------------------------------------------------ */
 .job-list { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1.25rem; }
 .job-row {
-  display: flex; align-items: center; gap: .75rem;
+  display: flex; align-items: center; gap: .6rem;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: .6rem .9rem;
-  text-decoration: none; color: var(--text); font-size: .9rem;
+  border-radius: 12px; padding: .5rem .7rem .5rem .9rem;
+  color: var(--text); font-size: .9rem;
 }
 .job-row:hover { border-color: var(--accent); }
+.job-link {
+  display: flex; align-items: center; gap: .75rem; flex: 1; min-width: 0;
+  text-decoration: none; color: inherit;
+}
 .job-icon { width: 1.4rem; text-align: center; color: var(--accent-strong); font-weight: 700; }
 .job-row[data-status="failed"] .job-icon { color: var(--warn-text); }
 .job-meta { flex: 1; color: var(--text-soft); }
 .job-meta strong { color: var(--text); text-transform: capitalize; }
 .progress.mini { width: 90px; height: 6px; flex: none; display: inline-block; }
+.job-actions { display: flex; gap: .35rem; flex: none; }
+.icon-btn.small { width: 1.9rem; height: 1.9rem; font-size: .9rem; }
 
 /* Results ------------------------------------------------------------- */
 .status-bar { margin: 1rem 0; }
@@ -216,4 +223,5 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
   .result-count { margin-left: 0; }
   .actions { flex-direction: column; }
   .btn { width: 100%; }
+  .progress.mini { width: 48px; }
 }
