@@ -70,9 +70,31 @@ CREATE TABLE IF NOT EXISTS saved_searches (
     last_job_id   TEXT REFERENCES jobs(id) ON DELETE SET NULL
 );
 
+-- Found flights accumulate across every search, de-duplicated by signature,
+-- and intentionally have NO foreign key to jobs: they must survive job
+-- deletion, re-runs and cache expiry so the user can review them days later.
+CREATE TABLE IF NOT EXISTS found_flights (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    signature        TEXT NOT NULL UNIQUE,
+    mode             TEXT NOT NULL,
+    destination      TEXT NOT NULL,
+    b_origin         TEXT,
+    outbound_date    TEXT NOT NULL,
+    return_date      TEXT NOT NULL,
+    combined_gbp     REAL NOT NULL,
+    payload          TEXT NOT NULL,
+    first_seen_at    TEXT NOT NULL,
+    last_seen_at     TEXT NOT NULL,
+    checked_at       TEXT,
+    check_status     TEXT,
+    check_note       TEXT,
+    check_price_gbp  REAL
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_job ON results(job_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_cache_fetched ON flight_cache(fetched_at);
+CREATE INDEX IF NOT EXISTS idx_found_seen ON found_flights(last_seen_at);
 """
 
 
@@ -496,6 +518,121 @@ async def delete_saved_search(db_path: Path, search_id: int) -> bool:
     async with aiosqlite.connect(db_path) as conn:
         cur = await conn.execute(
             "DELETE FROM saved_searches WHERE id = ?", (search_id,)
+        )
+        await conn.commit()
+        return cur.rowcount > 0
+
+
+# --------------------------------------------------------------------------- #
+# Found flights (persistent, de-duplicated collection)
+# --------------------------------------------------------------------------- #
+async def upsert_found_flights(
+    db_path: Path, items: list[tuple]
+) -> None:
+    """Insert or refresh many found flights in a single transaction.
+
+    Each item is ``(signature, mode, destination, b_origin, outbound_date,
+    return_date, payload_dict, combined_gbp)``. Re-finding an existing signature
+    (matched again by a later search) refreshes its price, payload and
+    ``last_seen_at`` but preserves ``first_seen_at`` — so the list never
+    duplicates and always shows the latest known price. A job captures all its
+    matches in one call to keep the per-match cost off the hot matching loop.
+    """
+    if not items:
+        return
+    now = _now()
+    rows = [
+        (
+            sig,
+            mode,
+            destination,
+            b_origin,
+            outbound_date,
+            return_date,
+            combined_gbp,
+            json.dumps(payload),
+            now,
+            now,
+        )
+        for (
+            sig,
+            mode,
+            destination,
+            b_origin,
+            outbound_date,
+            return_date,
+            payload,
+            combined_gbp,
+        ) in items
+    ]
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.executemany(
+            "INSERT INTO found_flights (signature, mode, destination, b_origin, "
+            "outbound_date, return_date, combined_gbp, payload, first_seen_at, "
+            "last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(signature) DO UPDATE SET "
+            "combined_gbp = excluded.combined_gbp, payload = excluded.payload, "
+            "last_seen_at = excluded.last_seen_at",
+            rows,
+        )
+        await conn.commit()
+
+
+async def list_found_flights(db_path: Path) -> list[dict]:
+    """Return every found flight, most recently seen first."""
+    async with aiosqlite.connect(db_path) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = await (
+            await conn.execute(
+                "SELECT * FROM found_flights ORDER BY last_seen_at DESC, id DESC"
+            )
+        ).fetchall()
+    out: list[dict] = []
+    for row in rows:
+        data = dict(row)
+        data["payload"] = json.loads(data["payload"])
+        out.append(data)
+    return out
+
+
+async def get_found_flight(db_path: Path, found_id: int) -> dict | None:
+    """Return a single found flight by id (payload decoded), or None."""
+    async with aiosqlite.connect(db_path) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (
+            await conn.execute(
+                "SELECT * FROM found_flights WHERE id = ?", (found_id,)
+            )
+        ).fetchone()
+    if not row:
+        return None
+    data = dict(row)
+    data["payload"] = json.loads(data["payload"])
+    return data
+
+
+async def update_found_check(
+    db_path: Path,
+    found_id: int,
+    status: str,
+    note: str,
+    price_gbp: float | None,
+) -> None:
+    """Record the outcome of an availability re-check."""
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute(
+            "UPDATE found_flights SET checked_at = ?, check_status = ?, "
+            "check_note = ?, check_price_gbp = ? WHERE id = ?",
+            (_now(), status, note, price_gbp, found_id),
+        )
+        await conn.commit()
+
+
+async def delete_found_flight(db_path: Path, found_id: int) -> bool:
+    """Delete a found flight. Returns False if it did not exist."""
+    async with aiosqlite.connect(db_path) as conn:
+        cur = await conn.execute(
+            "DELETE FROM found_flights WHERE id = ?", (found_id,)
         )
         await conn.commit()
         return cur.rowcount > 0

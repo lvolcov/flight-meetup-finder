@@ -224,3 +224,28 @@ class SavedSearch(BaseModel):
     created_at: str
     last_run_at: str | None = None
     last_job_id: str | None = None
+
+
+class FoundFlight(BaseModel):
+    """A flight collected into the persistent, de-duplicated Found list (F-36).
+
+    ``payload`` carries the same itinerary shape the results view renders, so
+    the frontend can reuse the result card. ``check_*`` fields hold the latest
+    availability re-check (``check_status`` is ``available`` / ``gone`` /
+    ``error``; ``check_price_gbp`` is the cheapest combined fare found now).
+    """
+
+    id: int
+    mode: str
+    destination: str
+    b_origin: str | None = None
+    outbound_date: str
+    return_date: str
+    combined_gbp: float
+    payload: dict
+    first_seen_at: str
+    last_seen_at: str
+    checked_at: str | None = None
+    check_status: str | None = None
+    check_note: str | None = None
+    check_price_gbp: float | None = None

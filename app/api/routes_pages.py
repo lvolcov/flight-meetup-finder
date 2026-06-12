@@ -48,3 +48,9 @@ async def results_page(request: Request, job_id: str) -> HTMLResponse:
 async def saved_page(request: Request) -> HTMLResponse:
     """Render the saved-searches page."""
     return _templates(request).TemplateResponse(request, "saved.html", {})
+
+
+@router.get("/found", response_class=HTMLResponse)
+async def found_page(request: Request) -> HTMLResponse:
+    """Render the found-flights page."""
+    return _templates(request).TemplateResponse(request, "found.html", {})

@@ -88,7 +88,11 @@ app/
                     #   seed, CRUD for all five tables
     cache.py        # read-through scrape cache (TTL + jittered throttle)
     jobs.py         # asyncio JobRunner: task expansion, retry-once/fail-soft,
-                    #   streams results, clears results on (re)run, estimate
+                    #   streams results, clears results on (re)run, estimate;
+                    #   bounded-concurrency scrape phase; auto-captures matches
+                    #   into found_flights (_record_found)
+    found.py        # Found-flights logic: price-independent dedup signature +
+                    #   availability re-check (re-scrape legs, cheapest now)
   api/
     deps.py                 # typed accessors for app.state singletons
     routes_jobs.py          # POST /api/estimate, POST /api/search,
@@ -96,8 +100,9 @@ app/
                             #   cancel / rerun-check / rerun / save / DELETE
     routes_destinations.py  # GET/POST/PATCH/DELETE /api/destinations
     routes_saved.py         # GET/POST/DELETE /api/saved-searches, + /run
-    routes_pages.py         # GET /, /search/{job_id}, /saved (Jinja shells)
-  templates/        # base, index (search form), results, saved,
+    routes_found.py         # GET /api/found-flights, POST {id}/check, DELETE
+    routes_pages.py         # GET /, /search/{job_id}, /saved, /found (shells)
+  templates/        # base, index (search form), results, saved, found,
                     #   _traveller_filters partial
   static/
     css/theme.css   # light (ivory/terracotta) + dark via CSS vars,
@@ -157,6 +162,19 @@ with `pytest tests/e2e -o addopts=""`.
   (client-side rate from `created_at` + `queries_done`).
 - **Form explanations (F-35)**: hint paragraphs + title tooltips on every
   filter, written for a non-technical user (Talita).
+- **Found flights (F-36)**: a third nav tab (`/found`) holding every match
+  across all searches, auto-collected and de-duplicated. Matches are captured
+  automatically by the runner (`_record_found` → `db.upsert_found_flight`) into
+  the `found_flights` table, which has **no FK to jobs on purpose** — these
+  survive job re-runs/deletion and the cache TTL, so they never expire. Dedup
+  is by a price-independent signature (`services/found.py:found_signature`:
+  route + dates + per-leg airline/depart time), so re-finding refreshes the
+  price + `last_seen_at` but keeps `first_seen_at`. Each card has a "Check if
+  still available" button → `POST /api/found-flights/{id}/check`, which
+  re-scrapes the legs fresh (`found.check_availability`, concurrency-bounded)
+  and reports the cheapest combined fare now vs the saved price
+  (available / gone / error), plus a Remove button (`DELETE`). Hidden-city
+  deep-link "results" are intentionally **not** captured.
 - **`POST /api/estimate`**: live query-count + duration estimate while
   editing the form, without creating a job.
 - **SVG favicon** (`static/favicon.svg`, plane on terracotta) and a

@@ -237,6 +237,21 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 
 .empty { color: var(--text-soft); text-align: center; padding: 2rem; }
 
+/* Found flights (F-36) — meta row, actions and availability status. */
+.found-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .75rem; flex-wrap: wrap;
+  margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--border);
+}
+.found-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.found-status-row { margin-top: .5rem; min-height: 1.2em; }
+.found-status { font-size: .85rem; font-weight: 500; }
+.found-status.ok { color: var(--good); }
+.found-status.bad { color: #d1493a; }
+.found-status.warn { color: var(--warn-text); }
+.found-status.muted { color: var(--text-soft); font-weight: 400; }
+.chk-inline { display: flex; align-items: center; gap: .4rem; font-size: .9rem; }
+
 /* Responsive (F-26) — single column, generous touch targets at 380px. */
 @media (max-width: 640px) {
   .grid-2 { grid-template-columns: 1fr; }
@@ -247,4 +262,6 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
   .actions { flex-direction: column; }
   .btn { width: 100%; }
   .progress.mini { width: 48px; }
+  .found-meta { flex-direction: column; align-items: stretch; }
+  .found-actions .btn { width: 100%; }
 }

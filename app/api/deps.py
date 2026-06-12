@@ -11,12 +11,18 @@ from pathlib import Path
 from fastapi import Request
 
 from app.config import Settings
+from app.services.flights import FlightsService
 from app.services.jobs import JobRunner
 
 
 def get_settings(request: Request) -> Settings:
     """Return the app-wide :class:`Settings`."""
     return request.app.state.settings
+
+
+def get_service(request: Request) -> FlightsService:
+    """Return the configured :class:`FlightsService` (the flight data source)."""
+    return request.app.state.service
 
 
 def get_db_path(request: Request) -> Path:

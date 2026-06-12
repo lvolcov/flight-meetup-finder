@@ -623,10 +623,119 @@ function initSaved() {
   });
 }
 
+/* =================================================================== */
+/* Found flights (F-36)                                                */
+/* =================================================================== */
+function fmtAgo(iso) {
+  if (!iso) return '';
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
+function foundStatusHTML(f) {
+  if (!f.check_status) return '<span class="found-status muted">Not checked yet</span>';
+  const cls = { available: 'ok', gone: 'bad', error: 'warn' }[f.check_status] || 'muted';
+  const when = f.checked_at ? ` · checked ${fmtAgo(f.checked_at)}` : '';
+  return `<span class="found-status ${cls}">${f.check_note || f.check_status}${when}</span>`;
+}
+
+function renderFound(f) {
+  const card = renderResult(f.payload);
+  card.classList.add('found-card');
+  card.dataset.foundId = f.id;
+  card.insertAdjacentHTML('beforeend',
+    `<div class="found-meta">` +
+    `<span class="hint">Found ${fmtAgo(f.first_seen_at)}</span>` +
+    `<span class="found-actions">` +
+    `<button type="button" class="btn primary small" data-check="${f.id}">` +
+    `Check if still available</button>` +
+    `<button type="button" class="btn ghost small" data-remove="${f.id}">Remove</button>` +
+    `</span></div>` +
+    `<div class="found-status-row" data-status="${f.id}">${foundStatusHTML(f)}</div>`);
+  return card;
+}
+
+const FoundView = {
+  data: [],
+  render() {
+    const sort = $('#found-sort').value;
+    const dest = $('#found-filter-dest').value.trim().toUpperCase();
+    const hideGone = $('#found-hide-gone').checked;
+    let rows = this.data.slice();
+    if (dest) rows = rows.filter((f) => f.destination.toUpperCase().includes(dest));
+    if (hideGone) rows = rows.filter((f) => f.check_status !== 'gone');
+    rows.sort((a, b) => (sort === 'price'
+      ? a.combined_gbp - b.combined_gbp
+      : new Date(b.last_seen_at) - new Date(a.last_seen_at)));
+    const box = $('#found-list');
+    box.innerHTML = '';
+    rows.forEach((f) => box.appendChild(renderFound(f)));
+    $('#found-empty').hidden = this.data.length > 0;
+    $('#found-count').textContent = this.data.length
+      ? `${rows.length} shown / ${this.data.length} found` : '';
+  },
+};
+
+async function checkFound(id, statusRow, btn) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Checking…';
+  if (statusRow)
+    statusRow.innerHTML = '<span class="found-status muted">Checking Google Flights…</span>';
+  try {
+    const updated = await sendJSON(`/api/found-flights/${id}/check`, 'POST');
+    const idx = FoundView.data.findIndex((f) => String(f.id) === String(id));
+    if (idx >= 0) FoundView.data[idx] = updated;
+    if (statusRow) statusRow.innerHTML = foundStatusHTML(updated);
+  } catch (e) {
+    if (statusRow)
+      statusRow.innerHTML = `<span class="found-status warn">Could not check (${e.message})</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+async function onFoundClick(ev) {
+  const checkBtn = ev.target.closest('[data-check]');
+  if (checkBtn) {
+    await checkFound(checkBtn.dataset.check,
+      $(`[data-status="${checkBtn.dataset.check}"]`), checkBtn);
+    return;
+  }
+  const removeBtn = ev.target.closest('[data-remove]');
+  if (removeBtn) {
+    if (!confirm('Remove this flight from your Found list?')) return;
+    const id = removeBtn.dataset.remove;
+    try {
+      await sendJSON(`/api/found-flights/${id}`, 'DELETE');
+      FoundView.data = FoundView.data.filter((f) => String(f.id) !== String(id));
+      FoundView.render();
+    } catch (e) { alert('Could not remove: ' + e.message); }
+  }
+}
+
+async function initFound() {
+  ['#found-sort', '#found-filter-dest', '#found-hide-gone'].forEach((s) =>
+    $(s).addEventListener('input', () => FoundView.render()));
+  $('#found-list').addEventListener('click', onFoundClick);
+  try {
+    FoundView.data = await getJSON('/api/found-flights');
+  } catch (e) { FoundView.data = []; }
+  FoundView.render();
+}
+
 /* ---- Boot --------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   if (window.FMF_PAGE === 'index') initIndex();
   else if (window.FMF_PAGE === 'results') initResults();
   else if (window.FMF_PAGE === 'saved') initSaved();
+  else if (window.FMF_PAGE === 'found') initFound();
 });

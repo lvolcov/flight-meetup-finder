@@ -22,6 +22,7 @@ from app.models.schemas import SearchRequest
 from app.services import db
 from app.services.cache import get_flights_cached
 from app.services.flights import FlightsService, google_flights_link
+from app.services.found import found_signature
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,9 @@ class JobRunner:
         # the shared counters out of order (a late stale write would make the
         # persisted ``queries_done`` go backwards).
         self._progress_lock = asyncio.Lock()
+        # Matches collected during the current job, flushed to found_flights in
+        # one transaction at the end (keeps per-match DB cost off the loop).
+        self._found_batch: list[tuple[dict, float]] = []
 
     async def start(self) -> None:
         """Launch the background worker (idempotent)."""
@@ -222,6 +226,7 @@ class JobRunner:
 
         resolved: dict[ScrapeTask, list[Flight]] = {}
         counters = {"done": 0, "failed": 0}
+        self._found_batch = []
 
         # Phase 1 — scrape every distinct leg. Scraping is the only I/O here
         # (matching below is pure and instant), so fan the scrapes out
@@ -233,16 +238,21 @@ class JobRunner:
 
         # Phase 2 — match every tuple from the now-resolved legs. Each
         # ``_resolve`` call hits the ``resolved`` cache, so no further scraping
-        # happens; the per-tuple status check keeps deletion responsive.
-        for ctx in tuples:
-            status = await db.get_job_status(self._db_path, job_id)
-            if status is None or status == "cancelled":
-                logger.info("job %s cancelled or deleted", job_id)
-                return
-            await self._evaluate_tuple(job_id, request, ctx, resolved, counters)
+        # happens; the per-tuple status check keeps deletion responsive. The
+        # ``finally`` flushes collected matches into found_flights once, even if
+        # the search is cancelled mid-way (partial finds are still kept).
+        try:
+            for ctx in tuples:
+                status = await db.get_job_status(self._db_path, job_id)
+                if status is None or status == "cancelled":
+                    logger.info("job %s cancelled or deleted", job_id)
+                    return
+                await self._evaluate_tuple(job_id, request, ctx, resolved, counters)
 
-        if request.mode == "visit" and request.hidden_city:
-            await self._add_hidden_city(job_id, request, a_origin)
+            if request.mode == "visit" and request.hidden_city:
+                await self._add_hidden_city(job_id, request, a_origin)
+        finally:
+            await self._flush_found()
 
         status = await db.get_job_status(self._db_path, job_id)
         if status is not None and status != "cancelled":
@@ -388,6 +398,7 @@ class JobRunner:
             payload,
             candidate.combined_gbp,
         )
+        self._record_found(payload, candidate.combined_gbp)
 
     async def _match_visit(
         self,
@@ -437,6 +448,37 @@ class JobRunner:
             payload,
             combined,
         )
+        self._record_found(payload, combined)
+
+    def _record_found(self, payload: dict, combined_gbp: float) -> None:
+        """Queue a match for the persistent found-flights list (F-36).
+
+        Collected during matching and flushed in one transaction by
+        :meth:`_flush_found`, so the user can review what searches turned up
+        across runs. The found-flights table has no foreign key to the job, so
+        these survive job re-runs/deletion and never expire.
+        """
+        self._found_batch.append((payload, combined_gbp))
+
+    async def _flush_found(self) -> None:
+        """Write all matches collected this job into found_flights at once."""
+        if not self._found_batch:
+            return
+        items = [
+            (
+                found_signature(payload),
+                payload["kind"],
+                payload["destination"],
+                payload.get("b_origin"),
+                payload["outbound_date"],
+                payload["return_date"],
+                payload,
+                combined_gbp,
+            )
+            for payload, combined_gbp in self._found_batch
+        ]
+        self._found_batch = []
+        await db.upsert_found_flights(self._db_path, items)
 
     async def _add_hidden_city(
         self, job_id: str, request: SearchRequest, a_origin: str

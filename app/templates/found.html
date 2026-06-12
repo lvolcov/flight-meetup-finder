@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Found flights · Flight Meetup Finder{% endblock %}
+{% block content %}
+<h1 class="page-title">Found flights</h1>
+<p class="lede">Everything your searches have turned up, collected and
+  de-duplicated. These don't expire — come back any time and re-check whether a
+  flight is still available and what it costs now.</p>
+
+<div class="controls card" id="found-controls">
+  <label>Sort by
+    <select id="found-sort">
+      <option value="recent">Recently found</option>
+      <option value="price">Cheapest</option>
+    </select>
+  </label>
+  <label>Destination
+    <input type="text" id="found-filter-dest" maxlength="3"
+           placeholder="any (IATA)" aria-label="Filter by destination IATA">
+  </label>
+  <label class="chk-inline">
+    <input type="checkbox" id="found-hide-gone"> Hide ones marked gone
+  </label>
+  <span class="result-count" id="found-count"></span>
+</div>
+
+<div id="found-list" class="results"></div>
+<p id="found-empty" class="hint" hidden>No flights found yet — run a
+  <a href="/">search</a> and matches will collect here automatically.</p>
+{% endblock %}
+{% block scripts %}<script>window.FMF_PAGE = 'found';</script>{% endblock %}

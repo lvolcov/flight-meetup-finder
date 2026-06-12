@@ -271,3 +271,26 @@ def test_saved_search_create_and_run(client: TestClient) -> None:
     assert body["status"] == "done"
 
     assert client.delete(f"/api/saved-searches/{saved['id']}").status_code == 204
+
+
+def test_found_flights_collect_check_and_delete(client: TestClient) -> None:
+    # A search auto-collects its matches into the persistent Found list.
+    job_id = client.post("/api/search", json=_meetup_body()).json()["job_id"]
+    _poll(client, job_id)
+
+    found = client.get("/api/found-flights").json()
+    assert len(found) >= 1
+    flight = found[0]
+    assert flight["payload"]["kind"] == "meetup"
+    assert flight["check_status"] is None  # not checked yet
+
+    # Re-checking availability re-scrapes and records an outcome.
+    checked = client.post(f"/api/found-flights/{flight['id']}/check").json()
+    assert checked["check_status"] in {"available", "gone", "error"}
+    assert checked["checked_at"]
+    assert checked["check_note"]
+
+    # Removal takes it off the list; it does not come back.
+    assert client.delete(f"/api/found-flights/{flight['id']}").status_code == 204
+    remaining = client.get("/api/found-flights").json()
+    assert all(f["id"] != flight["id"] for f in remaining)

@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.api import (
     routes_destinations,
+    routes_found,
     routes_jobs,
     routes_pages,
     routes_saved,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_jobs.router)
     app.include_router(routes_destinations.router)
     app.include_router(routes_saved.router)
+    app.include_router(routes_found.router)
     app.include_router(routes_pages.router)
 
     if STATIC_DIR.exists():
