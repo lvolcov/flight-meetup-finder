@@ -11,6 +11,10 @@ services:
     volumes:
       - fmf-data:/data
     restart: unless-stopped
+    # tini as PID 1 reaps the per-scrape Chromium subprocesses; without it
+    # uvicorn (PID 1, not an init) never wait()s on them and defunct
+    # headless_shell zombies pile up until the PID table is exhausted.
+    init: true
     healthcheck:
       test:
         - CMD

@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     # Rough wall-clock cost of one uncached scrape (Playwright launch +
     # Google Flights load). Used only for user-facing time estimates.
     scrape_cost_seconds: float = 6.0
+    # Hard ceiling on a single scrape. The runner is one worker, so a hung
+    # Playwright call (browser never returns) would otherwise wedge the whole
+    # pipeline forever; this lets it fail-soft via the retry path instead.
+    scrape_timeout_seconds: float = 90.0
+    # How many distinct legs to scrape at once within a job. Each scrape is a
+    # full headless Chromium (~300-500 MB) hitting Google, so keep this small:
+    # too high risks RAM pressure on the host and CAPTCHA/turnstile from
+    # Google. The worker stays single; this only fans out the per-leg I/O.
+    scrape_concurrency: int = 2
     cache_ttl_hours: int = 12
     eur_to_gbp: float = 0.85
 

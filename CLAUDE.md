@@ -25,7 +25,16 @@ Plex, Immich, etc.). Future work is enhancement/maintenance only.
 - Python 3.12 + FastAPI, Jinja2 templates, vanilla JS/CSS frontend.
   **No React, no bundler.**
 - SQLite via aiosqlite. **No external DB, no Redis, no Celery.**
-- Background work via a single `asyncio.Task` in the same process.
+- Background work via a single `asyncio.Task` in the same process. Within a
+  job that one worker fans the per-leg scrapes out with bounded concurrency
+  (`SCRAPE_CONCURRENCY`, default 2) via an `asyncio.Semaphore` — still one
+  worker, no queue, just parallel I/O. Each scrape is capped by
+  `SCRAPE_TIMEOUT_SECONDS` (default 90) so a hung browser fails soft instead
+  of wedging the worker. Keep concurrency small: each scrape is a full
+  headless Chromium (~300-500 MB) and Google CAPTCHAs aggressive parallelism.
+- The container runs with `init: true` (tini as PID 1) so the per-scrape
+  Chromium subprocesses are reaped — without it, zombie `headless_shell`
+  processes accumulate until the PID table is exhausted and the worker hangs.
 - `fast-flights` (pinned to **2.2**) for flight data, behind a service
   wrapper. **Must use `fetch_mode="local"`** (Playwright) — the other
   modes are broken (see `ARCHITECTURE.md` §4).

@@ -66,7 +66,13 @@ async def get_flights_cached(
         return [flight_from_dict(item) for item in payload]
 
     parsed_date = datetime.fromisoformat(flight_date).date()
-    flights = await service.search_one_way(origin, destination, parsed_date)
+    # Bound the scrape: the single worker must never block forever on a hung
+    # browser. On timeout this raises TimeoutError, which the job runner's
+    # retry/fail-soft policy (F-16) handles like any other scrape failure.
+    flights = await asyncio.wait_for(
+        service.search_one_way(origin, destination, parsed_date),
+        timeout=settings.scrape_timeout_seconds,
+    )
     await _throttle(settings)
     await db.put_cache(
         db_path,
