@@ -17,6 +17,7 @@ from app.services.flights import (
     flight_to_dict,
     google_flights_link,
     normalise_flight,
+    normalise_flights,
     parse_duration,
     parse_flight_datetime,
     parse_price,
@@ -155,3 +156,22 @@ def test_google_flights_link() -> None:
     assert link.startswith("https://www.google.com/travel/flights?q=")
     assert "MAN" in link and "LIS" in link and "2026-07-09" in link
     assert " " not in link
+
+
+def test_normalise_flights_skips_priceless_rows() -> None:
+    # Google sometimes returns "Price unavailable"; that row must be dropped,
+    # not raise and fail the whole leg.
+    good = FakeRaw("Ryanair", "8:35 AM on Thu, Jul 9", "11:50 AM on Thu, Jul 9",
+                   "3 hr 15 min", 0, "£99")
+    priceless = FakeRaw("TAP", "9:00 AM on Thu, Jul 9", "12:10 PM on Thu, Jul 9",
+                        "3 hr 10 min", 0, "Price unavailable")
+    flights = normalise_flights([good, priceless], date(2026, 7, 9))
+    assert len(flights) == 1
+    assert flights[0].airline == "Ryanair"
+    assert flights[0].price_amount == 99.0
+
+
+def test_normalise_flights_all_priceless_returns_empty() -> None:
+    priceless = FakeRaw("TAP", "9:00 AM on Thu, Jul 9", "12:10 PM on Thu, Jul 9",
+                        "3 hr 10 min", 0, "Price unavailable")
+    assert normalise_flights([priceless], date(2026, 7, 9)) == []

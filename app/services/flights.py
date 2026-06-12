@@ -167,6 +167,31 @@ def normalise_flight(raw: object, flight_date: date) -> Flight:
     )
 
 
+def normalise_flights(raw_flights: object, flight_date: date) -> list[Flight]:
+    """Normalise a scrape result, skipping rows that cannot be parsed.
+
+    Google sometimes returns rows with no fare (``price`` is
+    ``'Price unavailable'``), which :func:`parse_price` rejects. Such a flight
+    is unbookable and unrankable, so it is dropped rather than allowed to raise
+    — otherwise a single price-less row would fail (and needlessly retry) the
+    whole leg.
+
+    Args:
+        raw_flights: The iterable of raw flight objects from ``fast_flights``.
+        flight_date: The searched departure date (parsing anchor).
+
+    Returns:
+        The parseable flights; price-less / malformed rows are skipped.
+    """
+    flights: list[Flight] = []
+    for raw in raw_flights:  # type: ignore[union-attr]
+        try:
+            flights.append(normalise_flight(raw, flight_date))
+        except ValueError:
+            continue
+    return flights
+
+
 def flight_to_dict(flight: Flight) -> dict:
     """Serialise a :class:`Flight` to a JSON-safe dict (datetimes -> ISO)."""
     data = asdict(flight)
@@ -239,7 +264,7 @@ class FastFlightsService:
             passengers=Passengers(adults=1),
             fetch_mode=self._fetch_mode,
         )
-        return [normalise_flight(f, flight_date) for f in result.flights]
+        return normalise_flights(result.flights, flight_date)
 
     async def search_one_way(
         self, origin: str, destination: str, flight_date: date
