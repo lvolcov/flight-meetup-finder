@@ -264,8 +264,12 @@ async function rerunWithCheck(jobId) {
 
 /* Estimate of time remaining for a live job from its own progress rate. */
 function jobRemainingSeconds(job) {
-  if (!job.created_at || !job.queries_done || !job.queries_total) return null;
-  const elapsed = (Date.now() - new Date(job.created_at).getTime()) / 1000;
+  // Measure the rate from when the job actually started running, not from when
+  // it was created — a job can sit queued (or wait to resume after a restart)
+  // for a long time, and counting that dead time makes the ETA wildly high.
+  const since = job.started_at || job.created_at;
+  if (!since || !job.queries_done || !job.queries_total) return null;
+  const elapsed = (Date.now() - new Date(since).getTime()) / 1000;
   if (elapsed <= 0) return null;
   const rate = job.queries_done / elapsed;  // queries per second
   if (rate <= 0) return null;

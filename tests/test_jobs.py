@@ -154,6 +154,26 @@ async def test_estimate_queries(tmp_path: Path) -> None:
     assert await estimate_queries(db_path, _meetup_request(), "MAN") == 4
 
 
+async def test_running_stamps_started_at_and_resets_counters(
+    tmp_path: Path,
+) -> None:
+    # A resume re-evaluates from scratch, so entering "running" must stamp a
+    # fresh started_at (for an honest ETA) and zero the per-run counters.
+    db_path = tmp_path / "fmf.db"
+    await db.init_db(db_path)
+    await db.create_job(
+        db_path, "jr", "meetup", _meetup_request().model_dump_json(), 4
+    )
+    await db.update_job_progress(db_path, "jr", 99, 9)  # stale earlier run
+    assert (await db.get_job(db_path, "jr"))["started_at"] is None
+
+    await db.set_job_status(db_path, "jr", "running")
+    job = await db.get_job(db_path, "jr")
+    assert job["started_at"] is not None
+    assert job["queries_done"] == 0
+    assert job["queries_failed"] == 0
+
+
 async def test_meetup_job_streams_results(tmp_path: Path) -> None:
     db_path = tmp_path / "fmf.db"
     await db.init_db(db_path)

@@ -166,6 +166,9 @@ class JobSummary(BaseModel):
     queries_done: int
     queries_failed: int
     created_at: str
+    # When the job last entered "running"; drives an honest ETA that ignores
+    # time spent queued or waiting to resume. Null until it first runs.
+    started_at: str | None = None
 
 
 class JobStatus(BaseModel):
@@ -178,6 +181,7 @@ class JobStatus(BaseModel):
     queries_done: int
     queries_failed: int
     created_at: str = ""
+    started_at: str | None = None
     error: str | None = None
     results: list[dict] = Field(default_factory=list)
     hidden_city: list[dict] = Field(default_factory=list)

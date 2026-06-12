@@ -113,6 +113,7 @@ async def get_job(
         queries_done=job["queries_done"],
         queries_failed=job["queries_failed"],
         created_at=job["created_at"],
+        started_at=job["started_at"],
         error=job["error"],
         results=results,
         hidden_city=hidden,

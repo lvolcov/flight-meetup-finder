@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     queries_failed  INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
+    started_at      TEXT,
     error           TEXT
 );
 
@@ -139,6 +140,16 @@ async def _migrate(conn: aiosqlite.Connection) -> None:
             "ALTER TABLE destinations ADD COLUMN "
             "schengen INTEGER NOT NULL DEFAULT 1"
         )
+    # started_at records when a job last entered "running" — used for an honest
+    # ETA that excludes time spent queued or waiting to resume.
+    job_cols = [
+        row[1]
+        for row in await (
+            await conn.execute("PRAGMA table_info(jobs)")
+        ).fetchall()
+    ]
+    if "started_at" not in job_cols:
+        await conn.execute("ALTER TABLE jobs ADD COLUMN started_at TEXT")
     # Re-classify every boot so the known non-Schengen set stays applied to
     # rows that predate it (idempotent).
     placeholders = ",".join("?" for _ in NON_SCHENGEN_IATA)
@@ -321,7 +332,7 @@ async def list_jobs(db_path: Path, limit: int = 10) -> list[dict]:
         rows = await (
             await conn.execute(
                 "SELECT id, mode, status, queries_total, queries_done, "
-                "queries_failed, created_at FROM jobs "
+                "queries_failed, created_at, started_at FROM jobs "
                 "ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             )
@@ -357,12 +368,28 @@ async def get_job_status(db_path: Path, job_id: str) -> str | None:
 async def set_job_status(
     db_path: Path, job_id: str, status: str, error: str | None = None
 ) -> None:
-    """Set a job's status (and optional error message)."""
+    """Set a job's status (and optional error message).
+
+    Entering ``running`` (a fresh start or a resume) also stamps ``started_at``
+    and resets the per-run progress counters to zero, since a resumed job
+    re-evaluates from scratch — this keeps progress and the ETA consistent with
+    the current run rather than a stale earlier one.
+    """
+    now = _now()
     async with aiosqlite.connect(db_path) as conn:
-        await conn.execute(
-            "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ?",
-            (status, error, _now(), job_id),
-        )
+        if status == "running":
+            await conn.execute(
+                "UPDATE jobs SET status = ?, error = ?, updated_at = ?, "
+                "started_at = ?, queries_done = 0, queries_failed = 0 "
+                "WHERE id = ?",
+                (status, error, now, now, job_id),
+            )
+        else:
+            await conn.execute(
+                "UPDATE jobs SET status = ?, error = ?, updated_at = ? "
+                "WHERE id = ?",
+                (status, error, now, job_id),
+            )
         await conn.commit()
 
 
