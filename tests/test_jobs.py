@@ -60,6 +60,30 @@ class BrokenService:
         raise RuntimeError("scraper down")
 
 
+class ConcurrencyProbeService(FakeService):
+    """FakeService that records the peak number of overlapping scrapes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def search_one_way(
+        self, origin: str, destination: str, flight_date: date
+    ) -> list[Flight]:
+        import asyncio
+
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            # A real (tiny) sleep guarantees concurrent scrapes genuinely
+            # overlap rather than relying on a single scheduler yield.
+            await asyncio.sleep(0.02)
+            return await super().search_one_way(origin, destination, flight_date)
+        finally:
+            self.in_flight -= 1
+
+
 def _meetup_request() -> SearchRequest:
     return SearchRequest(
         mode="meetup",
@@ -175,6 +199,29 @@ async def test_job_survives_scraper_failure(tmp_path: Path) -> None:
     assert job["status"] == "done"  # F-16: no single failure kills the job
     assert job["queries_failed"] == 4
     assert await db.list_results(db_path, "job2") == []
+
+
+@pytest.mark.parametrize("concurrency", [1, 2])
+async def test_scrape_concurrency_is_bounded(
+    tmp_path: Path, concurrency: int
+) -> None:
+    """Legs scrape in parallel, but never more than ``scrape_concurrency``."""
+    db_path = tmp_path / "fmf.db"
+    await db.init_db(db_path)
+    req = _meetup_request()  # one date pair -> 4 distinct legs
+    await db.create_job(db_path, "jobc", "meetup", req.model_dump_json(), 4)
+
+    service = ConcurrencyProbeService()
+    settings = Settings(
+        scrape_delay_seconds=0, cache_ttl_hours=12, scrape_concurrency=concurrency
+    )
+    runner = JobRunner(db_path, service, settings)
+    await runner._process_job("jobc")
+
+    job = await db.get_job(db_path, "jobc")
+    assert job is not None and job["status"] == "done"
+    assert job["queries_done"] == 4
+    assert service.max_in_flight == concurrency  # hits the cap, never exceeds
 
 
 async def test_visit_job_with_price_cap(tmp_path: Path) -> None:

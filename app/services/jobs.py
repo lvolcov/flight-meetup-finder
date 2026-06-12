@@ -167,6 +167,10 @@ class JobRunner:
         self._settings = settings
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
+        # Serialises progress bookkeeping: concurrent scrapes must not write
+        # the shared counters out of order (a late stale write would make the
+        # persisted ``queries_done`` go backwards).
+        self._progress_lock = asyncio.Lock()
 
     async def start(self) -> None:
         """Launch the background worker (idempotent)."""
@@ -214,14 +218,23 @@ class JobRunner:
 
         a_origin = self._settings.traveller_a_origin
         destinations = await resolve_destinations(self._db_path, request)
-        _, tuples = expand_tasks(request, a_origin, destinations)
+        tasks, tuples = expand_tasks(request, a_origin, destinations)
 
         resolved: dict[ScrapeTask, list[Flight]] = {}
         counters = {"done": 0, "failed": 0}
 
+        # Phase 1 — scrape every distinct leg. Scraping is the only I/O here
+        # (matching below is pure and instant), so fan the scrapes out
+        # ``scrape_concurrency`` at a time and let ``resolved`` feed the
+        # matcher. Bails early if the job was cancelled or deleted mid-flight.
+        if not await self._resolve_all(job_id, tasks, resolved, counters):
+            logger.info("job %s cancelled or deleted", job_id)
+            return
+
+        # Phase 2 — match every tuple from the now-resolved legs. Each
+        # ``_resolve`` call hits the ``resolved`` cache, so no further scraping
+        # happens; the per-tuple status check keeps deletion responsive.
         for ctx in tuples:
-            # A deleted job (status None) is treated like a cancellation so
-            # deleting a running search stops it cleanly mid-flight.
             status = await db.get_job_status(self._db_path, job_id)
             if status is None or status == "cancelled":
                 logger.info("job %s cancelled or deleted", job_id)
@@ -235,6 +248,47 @@ class JobRunner:
         if status is not None and status != "cancelled":
             await db.set_job_status(self._db_path, job_id, "done")
 
+    async def _resolve_all(
+        self,
+        job_id: str,
+        tasks: set[ScrapeTask],
+        resolved: dict[ScrapeTask, list[Flight]],
+        counters: dict[str, int],
+    ) -> bool:
+        """Scrape every distinct leg with bounded concurrency.
+
+        Runs at most ``scrape_concurrency`` scrapes at once. The worker stays
+        single — this only parallelises the per-leg I/O — and each task checks
+        for cancellation/deletion before acquiring a browser so a deleted
+        search stops promptly without launching further scrapes.
+
+        Args:
+            job_id: The job being resolved.
+            tasks: The distinct ``(origin, destination, date)`` legs to scrape.
+            resolved: Shared leg-result cache, populated in place.
+            counters: Shared ``{"done", "failed"}`` progress counters.
+
+        Returns:
+            ``True`` if all legs were resolved; ``False`` if the job was
+            cancelled or deleted mid-flight.
+        """
+        semaphore = asyncio.Semaphore(max(1, self._settings.scrape_concurrency))
+        cancelled = False
+
+        async def resolve_one(task: ScrapeTask) -> None:
+            nonlocal cancelled
+            async with semaphore:
+                if cancelled:
+                    return
+                status = await db.get_job_status(self._db_path, job_id)
+                if status is None or status == "cancelled":
+                    cancelled = True
+                    return
+                await self._resolve(job_id, task, resolved, counters)
+
+        await asyncio.gather(*(resolve_one(task) for task in tasks))
+        return not cancelled
+
     async def _resolve(
         self,
         job_id: str,
@@ -246,6 +300,10 @@ class JobRunner:
         if task in resolved:
             return resolved[task]
         origin, destination, flight_date = task
+        # The scrape itself runs lock-free so legs resolve concurrently; only
+        # the progress bookkeeping below is serialised.
+        flights: list[Flight] = []
+        failed = False
         for attempt in range(2):
             try:
                 flights = await get_flights_cached(
@@ -256,20 +314,21 @@ class JobRunner:
                     destination,
                     flight_date,
                 )
-                resolved[task] = flights
-                counters["done"] += 1
                 break
             except Exception:  # noqa: BLE001 - retry once, then fail soft
                 if attempt == 0:
                     logger.warning("retry %s after error", task)
                     continue
                 logger.exception("query failed permanently: %s", task)
-                resolved[task] = []
-                counters["done"] += 1
+                failed = True
+        resolved[task] = flights
+        async with self._progress_lock:
+            counters["done"] += 1
+            if failed:
                 counters["failed"] += 1
-        await db.update_job_progress(
-            self._db_path, job_id, counters["done"], counters["failed"]
-        )
+            await db.update_job_progress(
+                self._db_path, job_id, counters["done"], counters["failed"]
+            )
         return resolved[task]
 
     async def _evaluate_tuple(
